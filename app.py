@@ -26,8 +26,8 @@ if choice == "Upload Putusan":
         placeholder="Contoh: Sengketa tanah waris 2 hektar, bukti letter C, atau ketik kata kunci seperti: korupsi, dana desa, OTT..."
     )
     
-    # Menerima format PDF, DOC, DOCX, dan RTF
-    file_dokumen = st.file_uploader("Pilih file Dokumen (Maksimal 500 KB)", type=['pdf', 'doc', 'docx', 'rtf'])
+    # Menerima format PDF, DOC, DOCX, dan RTF dengan label anjuran anonimisasi
+    file_dokumen = st.file_uploader("Upload putusan (Anonimisasi dianjurkan, Maksimal 500 KB)", type=['pdf', 'doc', 'docx', 'rtf'])
 
     if st.button("Simpan"):
         if file_dokumen and judul and nomor:
