@@ -10,48 +10,56 @@ supabase: Client = create_client(URL, KEY)
 
 st.title("⚖️ Bank Data Putusan")
 
-# Menu Navigasi
-menu = ["Cari Putusan", "Upload Putusan", "Registrasi/Login"]
+# Menu Navigasi (Fitur Login/Registrasi dihapus agar 100% Anonim)
+menu = ["Cari Putusan", "Upload Putusan"]
 choice = st.sidebar.selectbox("Pilih Menu", menu)
 
 # --- FITUR UPLOAD ---
 if choice == "Upload Putusan":
-    st.subheader("Tambah Putusan Baru")
+    st.subheader("Tambah Putusan Baru (Anonim)")
     judul = st.text_input("Judul Putusan")
     nomor = st.text_input("Nomor Putusan")
     
-    # 🌟 FITUR BARU: ISIAN BEBAS UNTUK KASUS POSISI / KATA KUNCI 🌟
+    # ISIAN BEBAS UNTUK KASUS POSISI / KATA KUNCI
     kasus_posisi = st.text_area(
         "Ringkasan Kasus Posisi / Kata Kunci Bebas", 
         placeholder="Contoh: Sengketa tanah waris 2 hektar, bukti letter C, atau ketik kata kunci seperti: korupsi, dana desa, OTT..."
     )
     
-    file_pdf = st.file_uploader("Pilih file PDF (Maksimal 500 KB)", type=['pdf'])
+    # Menerima format PDF, DOC, DOCX, dan RTF
+    file_dokumen = st.file_uploader("Pilih file Dokumen (Maksimal 500 KB)", type=['pdf', 'doc', 'docx', 'rtf'])
 
     if st.button("Simpan"):
-        if file_pdf and judul and nomor:
+        if file_dokumen and judul and nomor:
             
             # --- SATPAM PENGECEK UKURAN (500 KB = 512.000 bytes) ---
-            if file_pdf.size > 512000:
-                st.error("🚨 Gagal: Ukuran file Anda terlalu besar! Batas maksimal hanya 500 KB.")
+            if file_dokumen.size > 512000:
+                st.error("🚨 Gagal: Ukuran file Anda terlalu besar! Batas maksimal adalah 500 KB.")
             else:
-                with st.spinner("Sedang memproses dan menyimpan putusan..."):
-                    # A. EKSTRAKSI TEKS DARI PDF
+                with st.spinner("Sedang memproses dan menyimpan dokumen..."):
+                    # A. EKSTRAKSI TEKS (Hanya jika formatnya PDF)
                     teks_putusan = ""
-                    try:
-                        pdf_reader = PyPDF2.PdfReader(file_pdf)
-                        for page in pdf_reader.pages:
-                            extracted = page.extract_text()
-                            if extracted:
-                                teks_putusan += extracted + "\n"
-                    except Exception as e:
-                        st.warning("Peringatan: Gagal membaca teks dari PDF. File tetap disimpan, tapi isinya tidak bisa dicari.")
+                    if file_dokumen.name.lower().endswith('.pdf'):
+                        try:
+                            pdf_reader = PyPDF2.PdfReader(file_dokumen)
+                            for page in pdf_reader.pages:
+                                extracted = page.extract_text()
+                                if extracted:
+                                    teks_putusan += extracted + "\n"
+                        except Exception as e:
+                            st.warning("Peringatan: Gagal membaca teks dari PDF.")
+                    else:
+                        # Jika Word/RTF, kita andalkan tags/ringkasan kasus untuk pencarian
+                        teks_putusan = "Dokumen Non-PDF. Pencarian mengandalkan Ringkasan Kasus."
                     
-                    file_pdf.seek(0) 
+                    file_dokumen.seek(0) 
 
                     # B. Upload File ke Storage
-                    file_path = f"public/{file_pdf.name}"
-                    supabase.storage.from_("dokumen-putusan").upload(file_path, file_pdf.getvalue())
+                    # Pastikan nama file aman dari spasi agar URL tidak rusak
+                    nama_file_aman = file_dokumen.name.replace(" ", "_")
+                    file_path = f"public/{nama_file_aman}"
+                    
+                    supabase.storage.from_("dokumen-putusan").upload(file_path, file_dokumen.getvalue())
                     
                     # C. Ambil URL File
                     file_url = supabase.storage.from_("dokumen-putusan").get_public_url(file_path)
@@ -66,9 +74,9 @@ if choice == "Upload Putusan":
                     }
                     supabase.table("putusan").insert(data).execute()
                     
-                    st.success("Putusan berhasil diupload beserta Ringkasan Kasusnya!")
+                    st.success("Dokumen berhasil diupload secara anonim!")
         else:
-            st.error("Lengkapi semua data (Judul, Nomor, dan File PDF)!")
+            st.error("Lengkapi semua data (Judul, Nomor, dan File)!")
 
 # --- FITUR SEARCH ---
 elif choice == "Cari Putusan":
@@ -80,7 +88,7 @@ elif choice == "Cari Putusan":
         results = supabase.table("putusan").select("*").or_(f"judul.ilike.%{query}%,nomor.ilike.%{query}%,isi_teks.ilike.%{query}%,tags.ilike.%{query}%").execute()
         
         if results.data:
-            st.success(f"Ditemukan {len(results.data)} putusan yang relevan")
+            st.success(f"Ditemukan {len(results.data)} dokumen yang relevan")
             for item in results.data:
                 st.write(f"### {item['judul']}")
                 st.write(f"**Nomor:** {item['nomor']}")
@@ -92,16 +100,7 @@ elif choice == "Cari Putusan":
                 if item.get('isi_teks') and query.lower() in item['isi_teks'].lower():
                     st.caption("✨ Kata kunci ditemukan di dalam dokumen PDF.")
                     
-                st.link_button("Lihat PDF", item['file_url'])
+                st.link_button("Lihat Dokumen", item['file_url'])
                 st.divider()
         else:
-            st.info("Putusan tidak ditemukan.")
-
-# --- FITUR REGISTRASI ---
-elif choice == "Registrasi/Login":
-    st.subheader("Akun Member")
-    email = st.text_input("Email")
-    password = st.text_input("Password", type="password")
-    if st.button("Daftar"):
-        res = supabase.auth.sign_up({"email": email, "password": password})
-        st.success("Cek email Anda untuk konfirmasi!")
+            st.info("Dokumen tidak ditemukan.")
