@@ -58,11 +58,12 @@ if choice == "Upload Putusan":
                     file_path = f"public/{nama_file_aman}"
                     
                     # Tambahkan content_type agar Supabase mengenali jenis file
+                    # Tambahkan upsert=True agar jika nama file sama, file lama ditimpa (menghindari error)
                     content_type = file_dokumen.type
                     supabase.storage.from_("dokumen-putusan").upload(
                         path=file_path, 
                         file=file_dokumen.getvalue(),
-                        file_options={"content-type": content_type}
+                        file_options={"content-type": content_type, "upsert": "true"}
                     )
                     
                     # C. Ambil URL File
@@ -100,7 +101,6 @@ elif choice == "Cari Putusan":
                     st.info(f"📝 **Ringkasan Kasus / Kata Kunci:** {item['tags']}")
                 
                 # 🌟 TRIK PAKSA DOWNLOAD 🌟
-                # Menambahkan response-content-disposition=attachment agar browser wajib download
                 url_download = item['file_url'] + "?response-content-disposition=attachment"
                 
                 st.link_button("💾 Download Dokumen", url_download)
