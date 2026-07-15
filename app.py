@@ -8,7 +8,7 @@ URL = "https://fymgslpozaruhtbtbbre.supabase.co"
 KEY = "sb_publishable_nGCEdSUv8NtFEY3xi-7UQg_O_kpX25y"
 supabase: Client = create_client(URL, KEY)
 
-st.title("⚖️ Bank Data Putusan Menarik")
+st.title("⚖️ Bank Data Putusan")
 
 # Menu Navigasi (Fitur Login/Registrasi dihapus agar 100% Anonim)
 menu = ["Cari Putusan", "Upload Putusan"]
@@ -27,7 +27,7 @@ if choice == "Upload Putusan":
     )
     
     # Menerima format PDF, DOC, DOCX, dan RTF dengan label anjuran anonimisasi
-    file_dokumen = st.file_uploader("Upload putusan (Anonimisasi dianjurkan, Maksimal 500 KB)", type=['pdf', 'doc', 'docx', 'rtf'])
+    file_dokumen = st.file_uploader("Upload putusan (Anonimisasi dianjurkan)", type=['pdf', 'doc', 'docx', 'rtf'])
 
     if st.button("Simpan"):
         if file_dokumen and judul and nomor:
@@ -100,7 +100,13 @@ elif choice == "Cari Putusan":
                 if item.get('isi_teks') and query.lower() in item['isi_teks'].lower():
                     st.caption("✨ Kata kunci ditemukan di dalam dokumen PDF.")
                     
-                st.link_button("Lihat Dokumen", item['file_url'])
+                # 🌟 PERBAIKAN: Tombol Pintar & Pemaksa Download 🌟
+                if item['file_url'].lower().endswith('.pdf'):
+                    st.link_button("📄 Lihat PDF", item['file_url'])
+                else:
+                    # Menambahkan '?download=' di ujung URL agar file otomatis terunduh!
+                    st.link_button("💾 Download Dokumen (Buka di Word)", item['file_url'] + "?download=")
+                    
                 st.divider()
         else:
             st.info("Dokumen tidak ditemukan.")
