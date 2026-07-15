@@ -84,11 +84,3 @@ elif choice == "Cari Putusan":
                 st.divider()
         else:
             st.info("Dokumen tidak ditemukan.")
-```
-
-### Mengapa ini berhasil?
-1.  **`st.download_button`**: Ini fitur resmi Streamlit. Dia memaksa browser untuk mendownload apa pun yang diberikan ke tombol tersebut, tidak peduli apakah itu RTF, DOC, atau PDF.
-2.  **`download(path_str)`**: Kode baru ini menarik file dari brankas Supabase ke server kita dulu, baru kemudian diserahkan ke komputer Anda sebagai file "asli". 
-3.  **Tidak Hapus File:** Ini bekerja 100% pada file yang sudah ada di Supabase sekarang.
-
-Silakan *Commit changes* di GitHub, dan cobalah mengunduh file RTF yang tadi bermasalah. Sekarang browser pasti akan menyimpannya sebagai file RTF!
