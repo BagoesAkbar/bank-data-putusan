@@ -37,6 +37,7 @@ if choice == "Upload Putusan":
                 st.error("🚨 Gagal: Ukuran file Anda terlalu besar! Batas maksimal adalah 500 KB.")
             else:
                 with st.spinner("Sedang memproses dan menyimpan dokumen..."):
+                    
                     # A. EKSTRAKSI TEKS (Hanya jika formatnya PDF)
                     teks_putusan = ""
                     if file_dokumen.name.lower().endswith('.pdf'):
@@ -59,7 +60,12 @@ if choice == "Upload Putusan":
                     nama_file_aman = file_dokumen.name.replace(" ", "_")
                     file_path = f"public/{nama_file_aman}"
                     
-                    supabase.storage.from_("dokumen-putusan").upload(file_path, file_dokumen.getvalue())
+                    # 🌟 PERBAIKAN: Menyertakan "KTP" file (Content-Type) agar RTF tidak berubah jadi TXT 🌟
+                    supabase.storage.from_("dokumen-putusan").upload(
+                        file_path, 
+                        file_dokumen.getvalue(),
+                        file_options={"content-type": file_dokumen.type}
+                    )
                     
                     # C. Ambil URL File
                     file_url = supabase.storage.from_("dokumen-putusan").get_public_url(file_path)
@@ -105,7 +111,7 @@ elif choice == "Cari Putusan":
                     st.link_button("📄 Lihat PDF", item['file_url'])
                 else:
                     # Menambahkan '?download=' di ujung URL agar file otomatis terunduh!
-                    st.link_button("💾 Download Dokumen (Buka di Word)", item['file_url'] + "?download=")
+                    st.link_button("💾 Download Dokumen", item['file_url'] + "?download=")
                     
                 st.divider()
         else:
