@@ -9,7 +9,7 @@ URL = "https://fymgslpozaruhtbtbbre.supabase.co"
 KEY = "sb_publishable_nGCEdSUv8NtFEY3xi-7UQg_O_kpX25y"
 supabase: Client = create_client(URL, KEY)
 
-st.title("⚖️ Bank Data Putusan")
+st.title("Bank Data Putusan Menarik")
 
 menu = ["Cari Putusan", "Upload Putusan"]
 choice = st.sidebar.selectbox("Pilih Menu", menu)
