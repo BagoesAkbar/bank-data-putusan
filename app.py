@@ -19,7 +19,7 @@ if choice == "Upload Putusan":
     st.subheader("Tambah Putusan Baru (Anonim)")
     judul = st.text_input("Judul Putusan")
     nomor = st.text_input("Nomor Putusan")
-    kasus_posisi = st.text_area("Ringkasan Kasus Posisi / Kata Kunci", placeholder="Contoh: Korupsi, Sengketa tanah...")
+    kasus_posisi = st.text_area("Ringkasan Kasus Posisi / Kata Kunci Bebas")
     file_dokumen = st.file_uploader("Upload putusan (Anonimisasi dianjurkan, maks 500 KB)", type=['pdf', 'doc', 'docx', 'rtf'])
 
     if st.button("Simpan"):
@@ -28,25 +28,31 @@ if choice == "Upload Putusan":
                 st.error("🚨 Gagal: Ukuran file di atas 500 KB.")
             else:
                 with st.spinner("Menyimpan..."):
-                    nama_file_aman = file_dokumen.name.replace(" ", "_")
-                    file_path = f"public/{nama_file_aman}"
+                    # Simpan file dengan nama asli
+                    file_path = f"public/{file_dokumen.name}"
                     
-                    # Upload ke Storage
+                    # Upload ke Storage Supabase
                     supabase.storage.from_("dokumen-putusan").upload(
                         path=file_path, 
                         file=file_dokumen.getvalue(),
                         file_options={"content-type": file_dokumen.type}
                     )
                     
-                    # Simpan data & path file ke database
+                    # Dapatkan URL Publik
+                    file_url = supabase.storage.from_("dokumen-putusan").get_public_url(file_path)
+                    
+                    # Simpan data ke database
                     data = {
-                        "judul": judul, "nomor": nomor, "file_path": file_path,
-                        "isi_teks": "Data dokumen", "tags": kasus_posisi
+                        "judul": judul, 
+                        "nomor": nomor, 
+                        "file_url": file_url,
+                        "isi_teks": "Data dokumen", 
+                        "tags": kasus_posisi
                     }
                     supabase.table("putusan").insert(data).execute()
                     st.success("Berhasil disimpan!")
         else:
-            st.error("Lengkapi data!")
+            st.error("Lengkapi semua data!")
 
 # --- FITUR SEARCH ---
 elif choice == "Cari Putusan":
@@ -61,15 +67,9 @@ elif choice == "Cari Putusan":
                 st.write(f"### {item['judul']}")
                 st.info(f"🏷️ {item['tags']}")
                 
-                # Mengambil File untuk Download
-                try:
-                    file_data = supabase.storage.from_("dokumen-putusan").download(item['file_path'])
-                    st.download_button(
-                        label=f"💾 Download {item['file_path'].split('/')[-1]}",
-                        data=file_data,
-                        file_name=item['file_path'].split('/')[-1],
-                        mime="application/octet-stream"
-                    )
-                except Exception as e:
-                    st.error("Gagal mengambil file.")
+                # Gunakan link_button agar langsung mengunduh/membuka file asli
+                # Ini menghindari error "Gagal mengambil file"
+                st.link_button(f"💾 Download {item['judul']}", item['file_url'])
                 st.divider()
+        else:
+            st.info("Tidak ditemukan.")
