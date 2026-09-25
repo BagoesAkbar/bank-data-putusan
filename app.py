@@ -771,21 +771,15 @@ elif choice == "Sinkronisasi Storage":
                         )
 
                 # -----------------------------------------
-                # File yang sudah ada
-                # -----------------------------------------
+# File yang sudah terdaftar
+# -----------------------------------------
 
-                if skipped:
+if skipped:
 
-                    with st.expander(
-                        f"ℹ️ File yang sudah terdaftar "
-                        f"({len(skipped)})"
-                    ):
-
-                        for path in skipped:
-
-                            st.write(
-                                f"`{path}`"
-                            )
+    st.info(
+        f"ℹ️ {len(skipped)} file sudah terdaftar "
+        "di database."
+    )
 
                 # -----------------------------------------
                 # File gagal
