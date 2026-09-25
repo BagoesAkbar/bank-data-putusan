@@ -9,7 +9,7 @@ from urllib.parse import urlparse, unquote
 
 
 # =========================================================
-# 1. KONFIGURASI
+# KONFIGURASI
 # =========================================================
 
 URL = "https://fymgslpozaruhtbtbbre.supabase.co"
@@ -17,23 +17,56 @@ BUCKET = "dokumen-putusan"
 ROOT_PATH = "public"
 
 try:
-    KEY = st.secrets["SUPABASE_KEY"]
+    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 except Exception:
     st.error("SUPABASE_KEY belum diatur di Streamlit Secrets.")
     st.stop()
 
-supabase: Client = create_client(URL, KEY)
+supabase: Client = create_client(URL, SUPABASE_KEY)
 
 
 # =========================================================
-# 2. JUDUL
+# TAMPILAN
 # =========================================================
 
 st.title("Bank Data Putusan Menarik")
 
+st.markdown(
+    """
+    <style>
+    /* Sembunyikan teks batas bawaan uploader */
+    [data-testid="stFileUploaderDropzoneInstructions"] small {
+        display: none !important;
+    }
+
+    [data-testid="stFileUploaderDropzoneInstructions"] > div::after {
+        content: "Maksimal 500 KB per file";
+        display: block;
+        font-size: 0.75rem;
+        color: rgba(49, 51, 63, 0.60);
+        margin-top: 2px;
+    }
+
+    /* Kompatibilitas dengan versi Streamlit lain */
+    [data-testid="stFileDropzoneInstructions"] small {
+        display: none !important;
+    }
+
+    [data-testid="stFileDropzoneInstructions"] > div::after {
+        content: "Maksimal 500 KB per file";
+        display: block;
+        font-size: 0.75rem;
+        color: rgba(49, 51, 63, 0.60);
+        margin-top: 2px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 # =========================================================
-# 3. FUNGSI BANTU
+# FUNGSI BANTU
 # =========================================================
 
 def clean_title(file_name: str) -> str:
@@ -67,7 +100,7 @@ def build_tags(file_name: str, extension: str) -> str:
     stem = Path(file_name).stem
 
     words = re.split(r"[^A-Za-z0-9]+", stem)
-    words = [word.lower() for word in words if word]
+    words = [w.lower() for w in words if w]
 
     tags = ["storage sync"]
 
@@ -90,13 +123,14 @@ def build_tags(file_name: str, extension: str) -> str:
 def extract_pdf_text(file_bytes: bytes) -> str:
     try:
         reader = PyPDF2.PdfReader(io.BytesIO(file_bytes))
+
         pages = []
 
         for page in reader.pages:
-            page_text = page.extract_text()
+            text = page.extract_text()
 
-            if page_text:
-                pages.append(page_text)
+            if text:
+                pages.append(text)
 
         return "\n".join(pages).strip()
 
@@ -138,8 +172,8 @@ def storage_path_from_url(file_url: str) -> str:
 
     markers = [
         f"/object/public/{BUCKET}/",
-        f"/object/sign/{BUCKET}/",
         f"/object/{BUCKET}/",
+        f"/object/sign/{BUCKET}/",
     ]
 
     for marker in markers:
@@ -147,10 +181,7 @@ def storage_path_from_url(file_url: str) -> str:
         if marker in parsed.path:
 
             return unquote(
-                parsed.path.split(
-                    marker,
-                    1
-                )[1]
+                parsed.path.split(marker, 1)[1]
             )
 
     return ""
@@ -167,8 +198,7 @@ def get_file_bytes(file_path: str) -> bytes:
 
 def list_all_storage_files(
     root_path: str = ROOT_PATH
-) -> list[str]:
-
+):
     storage = (
         supabase
         .storage
@@ -213,12 +243,10 @@ def list_all_storage_files(
                 metadata = item.get("metadata")
                 item_id = item.get("id")
 
-                is_file = (
+                if (
                     metadata is not None
                     or item_id is not None
-                )
-
-                if is_file:
+                ):
 
                     files.append(full_path)
 
@@ -236,9 +264,9 @@ def list_all_storage_files(
     return files
 
 
-def get_existing_paths_from_database() -> set[str]:
+def get_existing_paths() -> set[str]:
 
-    existing_paths = set()
+    existing = set()
 
     offset = 0
     limit = 1000
@@ -265,18 +293,18 @@ def get_existing_paths_from_database() -> set[str]:
             )
 
             if path:
-                existing_paths.add(path)
+                existing.add(path)
 
         if len(rows) < limit:
             break
 
         offset += limit
 
-    return existing_paths
+    return existing
 
 
 # =========================================================
-# 4. MENU
+# MENU
 # =========================================================
 
 menu = [
@@ -292,7 +320,7 @@ choice = st.sidebar.selectbox(
 
 
 # =========================================================
-# 5. UPLOAD PUTUSAN
+# UPLOAD PUTUSAN
 # =========================================================
 
 if choice == "Upload Putusan":
@@ -325,6 +353,7 @@ if choice == "Upload Putusan":
             "docx",
             "rtf"
         ],
+        max_upload_size=1,
         key="upload_putusan",
     )
 
@@ -458,7 +487,7 @@ if choice == "Upload Putusan":
 
 
 # =========================================================
-# 6. SINKRONISASI STORAGE
+# SINKRONISASI STORAGE
 # =========================================================
 
 elif choice == "Sinkronisasi Storage":
@@ -468,8 +497,8 @@ elif choice == "Sinkronisasi Storage":
     )
 
     st.info(
-        "Fitur ini mendaftarkan file yang sudah ada "
-        "di Supabase Storage ke tabel 'putusan'. "
+        "Fitur ini hanya mendaftarkan file yang sudah "
+        "ada di Supabase Storage ke tabel 'putusan'. "
         "File asli tidak dihapus dan tidak di-upload ulang."
     )
 
@@ -494,7 +523,7 @@ elif choice == "Sinkronisasi Storage":
                 )
 
                 existing_paths = (
-                    get_existing_paths_from_database()
+                    get_existing_paths()
                 )
 
                 added_count = 0
@@ -639,21 +668,21 @@ elif choice == "Sinkronisasi Storage":
                         skipped_count
                     )
 
-                if skipped_count > 0:
+                if skipped_count:
 
                     st.info(
                         f"ℹ️ {skipped_count} file "
                         "sudah terdaftar di database."
                     )
 
-                if added_count > 0:
+                if added_count:
 
                     st.success(
                         f"✅ {added_count} file baru "
                         "berhasil ditambahkan ke database."
                     )
 
-                if failed_count > 0:
+                if failed_count:
 
                     st.warning(
                         f"⚠️ {failed_count} file "
@@ -678,7 +707,7 @@ elif choice == "Sinkronisasi Storage":
 
 
 # =========================================================
-# 7. CARI PUTUSAN
+# PENCARIAN PUTUSAN
 # =========================================================
 
 else:
@@ -689,7 +718,7 @@ else:
 
     query = st.text_input(
         "Masukkan kata kunci...",
-        key="search_query"
+        key="search_query",
     )
 
     if query:
@@ -706,7 +735,13 @@ else:
 
             try:
 
-                pattern = f"%{query}%"
+                pattern = (
+                    f"%{query}%"
+                )
+
+                # -----------------------------------------
+                # Pencarian judul
+                # -----------------------------------------
 
                 hasil_judul = (
                     supabase
@@ -719,6 +754,10 @@ else:
                     .execute()
                 )
 
+                # -----------------------------------------
+                # Pencarian nomor
+                # -----------------------------------------
+
                 hasil_nomor = (
                     supabase
                     .table("putusan")
@@ -730,6 +769,10 @@ else:
                     .execute()
                 )
 
+                # -----------------------------------------
+                # Pencarian isi
+                # -----------------------------------------
+
                 hasil_isi = (
                     supabase
                     .table("putusan")
@@ -740,6 +783,10 @@ else:
                     )
                     .execute()
                 )
+
+                # -----------------------------------------
+                # Pencarian tags
+                # -----------------------------------------
 
                 hasil_tags = (
                     supabase
@@ -770,12 +817,19 @@ else:
                     hasil_tags.data or []
                 )
 
+                # -----------------------------------------
+                # Hilangkan duplikat
+                # -----------------------------------------
+
                 hasil_unik = []
+
                 seen = set()
 
                 for item in semua_data:
 
-                    item_id = item.get("id")
+                    item_id = (
+                        item.get("id")
+                    )
 
                     if item_id is None:
 
@@ -803,6 +857,10 @@ else:
                         hasil_unik.append(
                             item
                         )
+
+                # -----------------------------------------
+                # Tampilkan hasil
+                # -----------------------------------------
 
                 if hasil_unik:
 
@@ -873,8 +931,10 @@ else:
                                     ).name
                                 )
 
-                                mime = safe_mime(
-                                    nama_download
+                                mime = (
+                                    safe_mime(
+                                        nama_download
+                                    )
                                 )
 
                                 st.download_button(
