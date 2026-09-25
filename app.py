@@ -31,34 +31,79 @@ supabase: Client = create_client(URL, SUPABASE_KEY)
 
 st.title("Bank Data Putusan Menarik")
 
+
+# =========================================================
+# CSS UPLOADER
+# =========================================================
+# CSS ini hanya berlaku untuk uploader dengan key
+# "upload_putusan".
+#
+# Tujuannya menyembunyikan teks bawaan Streamlit:
+# "1MB per file • PDF, DOC, DOCX, RTF"
+#
+# lalu menampilkan:
+# "Maksimal 500 KB per file"
+# =========================================================
+
 st.markdown(
     """
     <style>
-    /* Sembunyikan teks batas bawaan uploader */
-    [data-testid="stFileUploaderDropzoneInstructions"] small {
-        display: none !important;
+
+    /* =====================================================
+       UPLOADER UTAMA
+       ===================================================== */
+
+    .st-key-upload_putusan
+    [data-testid*="FileUploaderDropzoneInstructions"] {
+        font-size: 0 !important;
     }
 
-    [data-testid="stFileUploaderDropzoneInstructions"] > div::after {
+    .st-key-upload_putusan
+    [data-testid*="FileUploaderDropzoneInstructions"] * {
+        font-size: 0 !important;
+        line-height: 0 !important;
+        visibility: hidden !important;
+    }
+
+    .st-key-upload_putusan
+    [data-testid*="FileUploaderDropzoneInstructions"]::after {
         content: "Maksimal 500 KB per file";
-        display: block;
-        font-size: 0.75rem;
-        color: rgba(49, 51, 63, 0.60);
-        margin-top: 2px;
+        display: block !important;
+        font-size: 0.75rem !important;
+        line-height: 1.2 !important;
+        color: rgba(49, 51, 63, 0.60) !important;
+        margin-top: 2px !important;
+        visibility: visible !important;
     }
 
-    /* Kompatibilitas dengan versi Streamlit lain */
-    [data-testid="stFileDropzoneInstructions"] small {
-        display: none !important;
+
+    /* =====================================================
+       FALLBACK STRUKTUR STREAMLIT
+       ===================================================== */
+
+    .st-key-upload_putusan
+    [data-testid="stFileUploaderDropzoneInstructions"] {
+        font-size: 0 !important;
     }
 
-    [data-testid="stFileDropzoneInstructions"] > div::after {
+    .st-key-upload_putusan
+    [data-testid="stFileUploaderDropzoneInstructions"] * {
+        font-size: 0 !important;
+        line-height: 0 !important;
+        visibility: hidden !important;
+    }
+
+    .st-key-upload_putusan
+    [data-testid="stFileUploaderDropzoneInstructions"]::after {
         content: "Maksimal 500 KB per file";
-        display: block;
-        font-size: 0.75rem;
-        color: rgba(49, 51, 63, 0.60);
-        margin-top: 2px;
+        display: block !important;
+        font-size: 0.75rem !important;
+        line-height: 1.2 !important;
+        color: rgba(49, 51, 63, 0.60) !important;
+        margin-top: 2px !important;
+        visibility: visible !important;
     }
+
     </style>
     """,
     unsafe_allow_html=True,
@@ -99,13 +144,23 @@ def extract_case_number(file_name: str) -> str:
 def build_tags(file_name: str, extension: str) -> str:
     stem = Path(file_name).stem
 
-    words = re.split(r"[^A-Za-z0-9]+", stem)
-    words = [w.lower() for w in words if w]
+    words = re.split(
+        r"[^A-Za-z0-9]+",
+        stem
+    )
+
+    words = [
+        word.lower()
+        for word in words
+        if word
+    ]
 
     tags = ["storage sync"]
 
     if extension:
-        tags.append(extension.lstrip(".").lower())
+        tags.append(
+            extension.lstrip(".").lower()
+        )
 
     tags.extend(words)
 
@@ -122,7 +177,9 @@ def build_tags(file_name: str, extension: str) -> str:
 
 def extract_pdf_text(file_bytes: bytes) -> str:
     try:
-        reader = PyPDF2.PdfReader(io.BytesIO(file_bytes))
+        reader = PyPDF2.PdfReader(
+            io.BytesIO(file_bytes)
+        )
 
         pages = []
 
@@ -164,7 +221,10 @@ def safe_mime(file_name: str) -> str:
     return "application/octet-stream"
 
 
-def storage_path_from_url(file_url: str) -> str:
+def storage_path_from_url(
+    file_url: str
+) -> str:
+
     if not file_url:
         return ""
 
@@ -181,13 +241,19 @@ def storage_path_from_url(file_url: str) -> str:
         if marker in parsed.path:
 
             return unquote(
-                parsed.path.split(marker, 1)[1]
+                parsed.path.split(
+                    marker,
+                    1
+                )[1]
             )
 
     return ""
 
 
-def get_file_bytes(file_path: str) -> bytes:
+def get_file_bytes(
+    file_path: str
+) -> bytes:
+
     return (
         supabase
         .storage
@@ -198,7 +264,8 @@ def get_file_bytes(file_path: str) -> bytes:
 
 def list_all_storage_files(
     root_path: str = ROOT_PATH
-):
+) -> list[str]:
+
     storage = (
         supabase
         .storage
@@ -248,7 +315,9 @@ def list_all_storage_files(
                     or item_id is not None
                 ):
 
-                    files.append(full_path)
+                    files.append(
+                        full_path
+                    )
 
                 else:
 
@@ -289,7 +358,10 @@ def get_existing_paths() -> set[str]:
         for row in rows:
 
             path = storage_path_from_url(
-                row.get("file_url", "")
+                row.get(
+                    "file_url",
+                    ""
+                )
             )
 
             if path:
@@ -345,6 +417,15 @@ if choice == "Upload Putusan":
         "Ringkasan Kasus Posisi / Kata Kunci Bebas"
     )
 
+    # -----------------------------------------------------
+    # Streamlit membutuhkan integer MB untuk
+    # max_upload_size.
+    #
+    # 1 = 1 MB sebagai batas teknis widget.
+    # Batas nyata aplikasi tetap 500 KB melalui
+    # pemeriksaan file_dokumen.size di bawah.
+    # -----------------------------------------------------
+
     file_dokumen = st.file_uploader(
         "Upload putusan (Anonimisasi dianjurkan)",
         type=[
@@ -356,6 +437,10 @@ if choice == "Upload Putusan":
         max_upload_size=1,
         key="upload_putusan",
     )
+
+    # -----------------------------------------------------
+    # TOMBOL SIMPAN
+    # -----------------------------------------------------
 
     if st.button(
         "Simpan",
@@ -372,6 +457,7 @@ if choice == "Upload Putusan":
                 "Lengkapi semua data!"
             )
 
+        # 500 KB = 512000 byte
         elif file_dokumen.size > 512000:
 
             st.error(
@@ -639,6 +725,10 @@ elif choice == "Sinkronisasi Storage":
 
                         failed_count += 1
 
+                # -------------------------------------------------
+                # HASIL
+                # -------------------------------------------------
+
                 st.success(
                     "✅ Sinkronisasi selesai!"
                 )
@@ -668,6 +758,7 @@ elif choice == "Sinkronisasi Storage":
                         skipped_count
                     )
 
+                # Nama file sengaja TIDAK ditampilkan
                 if skipped_count:
 
                     st.info(
@@ -718,7 +809,7 @@ else:
 
     query = st.text_input(
         "Masukkan kata kunci...",
-        key="search_query",
+        key="search_query"
     )
 
     if query:
@@ -739,9 +830,9 @@ else:
                     f"%{query}%"
                 )
 
-                # -----------------------------------------
-                # Pencarian judul
-                # -----------------------------------------
+                # -------------------------------------------------
+                # PENCARIAN JUDUL
+                # -------------------------------------------------
 
                 hasil_judul = (
                     supabase
@@ -754,9 +845,9 @@ else:
                     .execute()
                 )
 
-                # -----------------------------------------
-                # Pencarian nomor
-                # -----------------------------------------
+                # -------------------------------------------------
+                # PENCARIAN NOMOR
+                # -------------------------------------------------
 
                 hasil_nomor = (
                     supabase
@@ -769,9 +860,9 @@ else:
                     .execute()
                 )
 
-                # -----------------------------------------
-                # Pencarian isi
-                # -----------------------------------------
+                # -------------------------------------------------
+                # PENCARIAN ISI
+                # -------------------------------------------------
 
                 hasil_isi = (
                     supabase
@@ -784,9 +875,9 @@ else:
                     .execute()
                 )
 
-                # -----------------------------------------
-                # Pencarian tags
-                # -----------------------------------------
+                # -------------------------------------------------
+                # PENCARIAN TAGS
+                # -------------------------------------------------
 
                 hasil_tags = (
                     supabase
@@ -798,6 +889,10 @@ else:
                     )
                     .execute()
                 )
+
+                # -------------------------------------------------
+                # GABUNGKAN
+                # -------------------------------------------------
 
                 semua_data = []
 
@@ -817,9 +912,9 @@ else:
                     hasil_tags.data or []
                 )
 
-                # -----------------------------------------
-                # Hilangkan duplikat
-                # -----------------------------------------
+                # -------------------------------------------------
+                # HILANGKAN DUPLIKAT
+                # -------------------------------------------------
 
                 hasil_unik = []
 
@@ -858,9 +953,9 @@ else:
                             item
                         )
 
-                # -----------------------------------------
-                # Tampilkan hasil
-                # -----------------------------------------
+                # -------------------------------------------------
+                # HASIL PENCARIAN
+                # -------------------------------------------------
 
                 if hasil_unik:
 
