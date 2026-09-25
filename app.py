@@ -1,25 +1,20 @@
-import io
-import mimetypes
-import re
-from pathlib import Path as FilePath
-from urllib.parse import unquote, urlparse
-
-import PyPDF2
 import streamlit as st
-from supabase import Client, create_client
+from supabase import create_client, Client
+import PyPDF2
+import mimetypes
+import io
+import re
+from pathlib import Path
+from urllib.parse import urlparse, unquote
+
 
 # =========================================================
 # KONFIGURASI
 # =========================================================
-st.set_page_config(
-    page_title="Bank Data Putusan Menarik",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
 
-SUPABASE_URL = "https://fymgslpozaruhtbtbbre.supabase.co"
-SUPABASE_BUCKET = "dokumen-putusan"
-SUPABASE_ROOT = "public"
+URL = "https://fymgslpozaruhtbtbbre.supabase.co"
+BUCKET = "dokumen-putusan"
+ROOT_PATH = "public"
 
 try:
     SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
@@ -27,70 +22,1060 @@ except Exception:
     st.error("SUPABASE_KEY belum diatur di Streamlit Secrets.")
     st.stop()
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase: Client = create_client(URL, SUPABASE_KEY)
+
 
 # =========================================================
 # TAMPILAN
-# Tidak menggunakan triple-quoted string agar aman dari
-# SyntaxError 'unterminated triple-quoted string literal'.
 # =========================================================
-CSS = "\n".join([
-    "html, body, .stApp { background: #0b0f14 !important; color: #f3f4f6 !important; }",
-    "[data-testid='stAppViewContainer'] { background: #0b0f14 !important; }",
-    "[data-testid='stHeader'] { background: #0b0f14 !important; border-bottom: 1px solid #202938 !important; }",
-    "[data-testid='stToolbar'] { visibility: hidden; }",
-    "[data-testid='stDecoration'] { display: none; }",
-    ".main .block-container { max-width: 1120px; padding-top: 2rem; padding-bottom: 3rem; }",
-    ".site-header { border-bottom: 1px solid #202938; padding-bottom: 1rem; margin-bottom: 1.6rem; }",
-    ".site-title { color: #f3f4f6; font-size: 1.65rem; font-weight: 700; letter-spacing: -0.025em; line-height: 1.25; }",
-    ".site-subtitle { color: #9aa4b2; font-size: 0.88rem; margin-top: 0.3rem; }",
-    ".hero, .result-card, .info-box { background: #111722 !important; border: 1px solid #273142 !important; border-radius: 12px; }",
-    ".hero { padding: 1.7rem 1.8rem; margin-bottom: 1.25rem; }",
-    ".hero-title { color: #f3f4f6; font-size: 1.45rem; font-weight: 700; margin-bottom: 0.35rem; }",
-    ".hero-text { color: #aab4c2; font-size: 0.92rem; line-height: 1.6; }",
-    ".result-card { padding: 1.15rem 1.25rem; margin-bottom: 0.9rem; box-shadow: 0 2px 12px rgba(0,0,0,.18); }",
-    ".result-number { color: #79b8ff; font-size: 0.82rem; font-weight: 700; margin-bottom: 0.3rem; }",
-    ".result-title { color: #f3f4f6; font-size: 1.08rem; font-weight: 700; line-height: 1.45; }",
-    ".result-summary { color: #b7c0cc; font-size: 0.9rem; line-height: 1.65; margin-top: 0.65rem; }",
-    ".tag { display: inline-block; color: #9cc7ff; background: #182437; border: 1px solid #2a4668; border-radius: 999px; padding: 0.25rem 0.55rem; margin: 0.55rem 0.25rem 0 0; font-size: 0.72rem; font-weight: 600; }",
-    ".info-box { padding: 1rem 1.1rem; color: #b7c0cc; font-size: 0.9rem; line-height: 1.65; }",
-    ".section-label { color: #f3f4f6; font-size: 1rem; font-weight: 700; margin: 1.2rem 0 0.65rem; }",
-    ".builder { text-align: center; color: #6f7b8c; font-size: 0.68rem; letter-spacing: 0.02em; margin-top: 2.6rem; padding-top: 0.9rem; border-top: 1px solid #202938; }",
-    "section[data-testid='stSidebar'] { background: #0a0e13 !important; border-right: 1px solid #202938 !important; }",
-    "section[data-testid='stSidebar'] * { color: #e6e9ee !important; }",
-    "section[data-testid='stSidebar'] [data-testid='stMarkdownContainer'] p { color: #e6e9ee !important; }",
-    "div[data-testid='stTextInput'] input, div[data-testid='stTextArea'] textarea { background: #111722 !important; color: #f3f4f6 !important; border: 1px solid #344054 !important; border-radius: 8px !important; }",
-    "div[data-testid='stTextInput'] input::placeholder, div[data-testid='stTextArea'] textarea::placeholder { color: #778295 !important; opacity: 1 !important; }",
-    "div[data-testid='stSelectbox'] > div > div { background: #111722 !important; color: #f3f4f6 !important; border: 1px solid #344054 !important; border-radius: 8px !important; }",
-    "div[data-baseweb='popover'] { background: #111722 !important; }",
-    "div[role='listbox'], div[role='option'] { background: #111722 !important; color: #f3f4f6 !important; }",
-    "div[role='option']:hover { background: #1b2636 !important; }",
-    "div[data-testid='stButton'] > button, div[data-testid='stDownloadButton'] > button { background: #111722 !important; color: #f3f4f6 !important; border: 1px solid #344054 !important; border-radius: 8px !important; font-weight: 600 !important; }",
-    "div[data-testid='stButton'] > button:hover, div[data-testid='stDownloadButton'] > button:hover { background: #182437 !important; border-color: #5b9ee8 !important; color: #ffffff !important; }",
-    "div[data-testid='stFileUploader'] { background: #111722 !important; border: 1px solid #273142 !important; border-radius: 10px !important; padding: .4rem !important; }",
-    "div[data-testid='stFileUploaderDropzone'] { background: #0f141d !important; border: 1px dashed #344054 !important; }",
-    "div[data-testid='stFileUploaderDropzone'] * { color: #d6dbe3 !important; }",
-    ".st-key-upload_putusan [data-testid*='FileUploaderDropzoneInstructions'] { font-size: 0 !important; }",
-    ".st-key-upload_putusan [data-testid*='FileUploaderDropzoneInstructions'] * { font-size: 0 !important; line-height: 0 !important; visibility: hidden !important; }",
-    ".st-key-upload_putusan [data-testid*='FileUploaderDropzoneInstructions']::after { content: 'Maksimal 500 KB per file'; display: block !important; font-size: 0.75rem !important; line-height: 1.2 !important; color: #9aa4b2 !important; visibility: visible !important; }",
-    "div[data-testid='stCaptionContainer'], .stCaption { color: #8d99a8 !important; }",
-    "label, .stMarkdown, .stText, [data-testid='stMetricLabel'], [data-testid='stMetricValue'] { color: #e6e9ee !important; }",
-    "hr { border-color: #202938 !important; }",
-    "a { color: #79b8ff !important; }",
-])
-st.markdown("<style>" + CSS + "</style>", unsafe_allow_html=True)
+
+st.title("Bank Data Putusan Menarik")
+
+
+# =========================================================
+# CSS UPLOADER
+# =========================================================
+# CSS ini hanya berlaku untuk uploader dengan key
+# "upload_putusan".
+#
+# Tujuannya menyembunyikan teks bawaan Streamlit:
+# "1MB per file • PDF, DOC, DOCX, RTF"
+#
+# lalu menampilkan:
+# "Maksimal 500 KB per file"
+# =========================================================
+
+st.markdown(
+    """
+    <style>
+
+    /* =====================================================
+       UPLOADER UTAMA
+       ===================================================== */
+
+    .st-key-upload_putusan
+    [data-testid*="FileUploaderDropzoneInstructions"] {
+        font-size: 0 !important;
+    }
+
+    .st-key-upload_putusan
+    [data-testid*="FileUploaderDropzoneInstructions"] * {
+        font-size: 0 !important;
+        line-height: 0 !important;
+        visibility: hidden !important;
+    }
+
+    .st-key-upload_putusan
+    [data-testid*="FileUploaderDropzoneInstructions"]::after {
+        content: "Maksimal 500 KB per file";
+        display: block !important;
+        font-size: 0.75rem !important;
+        line-height: 1.2 !important;
+        color: rgba(49, 51, 63, 0.60) !important;
+        margin-top: 2px !important;
+        visibility: visible !important;
+    }
+
+
+    /* =====================================================
+       FALLBACK STRUKTUR STREAMLIT
+       ===================================================== */
+
+    .st-key-upload_putusan
+    [data-testid="stFileUploaderDropzoneInstructions"] {
+        font-size: 0 !important;
+    }
+
+    .st-key-upload_putusan
+    [data-testid="stFileUploaderDropzoneInstructions"] * {
+        font-size: 0 !important;
+        line-height: 0 !important;
+        visibility: hidden !important;
+    }
+
+    .st-key-upload_putusan
+    [data-testid="stFileUploaderDropzoneInstructions"]::after {
+        content: "Maksimal 500 KB per file";
+        display: block !important;
+        font-size: 0.75rem !important;
+        line-height: 1.2 !important;
+        color: rgba(49, 51, 63, 0.60) !important;
+        margin-top: 2px !important;
+        visibility: visible !important;
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 # =========================================================
 # FUNGSI BANTU
 # =========================================================
-def clean_title(file_name):
-    stem = FilePath(file_name).stem
+
+def clean_title(file_name: str) -> str:
+    stem = Path(file_name).stem
     stem = stem.replace("_", " ")
     stem = re.sub(r"\s+", " ", stem)
     return stem.strip()
 
 
-def safe_mime(file_name):
+def extract_case_number(file_name: str) -> str:
+    patterns = [
+        r"(?i)(\d+)[_\- ]+(Pdt\.G)[_\- ]+(\d{4})[_\- ]+([A-Za-z]{2,}(?:\.[A-Za-z0-9]+)+)",
+        r"(?i)(\d+)[_\- ]+(Pdt\.G)[_\- ]+(\d{4})[_\- ]+([A-Za-z]{2,})",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, file_name)
+
+        if match:
+            return (
+                f"{match.group(1)}/"
+                f"{match.group(2)}/"
+                f"{match.group(3)}/"
+                f"{match.group(4)}"
+            )
+
+    return ""
+
+
+def build_tags(file_name: str, extension: str) -> str:
+    stem = Path(file_name).stem
+
+    words = re.split(
+        r"[^A-Za-z0-9]+",
+        stem
+    )
+
+    words = [
+        word.lower()
+        for word in words
+        if word
+    ]
+
+    tags = ["storage sync"]
+
+    if extension:
+        tags.append(
+            extension.lstrip(".").lower()
+        )
+
+    tags.extend(words)
+
+    result = []
+    seen = set()
+
+    for tag in tags:
+        if tag not in seen:
+            seen.add(tag)
+            result.append(tag)
+
+    return ", ".join(result[:80])
+
+
+def extract_pdf_text(file_bytes: bytes) -> str:
+    try:
+        reader = PyPDF2.PdfReader(
+            io.BytesIO(file_bytes)
+        )
+
+        pages = []
+
+        for page in reader.pages:
+            text = page.extract_text()
+
+            if text:
+                pages.append(text)
+
+        return "\n".join(pages).strip()
+
+    except Exception:
+        return ""
+
+
+def safe_mime(file_name: str) -> str:
     mime = mimetypes.guess_type(file_name)[0]
+
     if mime:
         return mime
+
+    extension = Path(file_name).suffix.lower()
+
+    if extension == ".rtf":
+        return "application/rtf"
+
+    if extension == ".doc":
+        return "application/msword"
+
+    if extension == ".docx":
+        return (
+            "application/vnd.openxmlformats-officedocument."
+            "wordprocessingml.document"
+        )
+
+    if extension == ".pdf":
+        return "application/pdf"
+
+    return "application/octet-stream"
+
+
+def storage_path_from_url(
+    file_url: str
+) -> str:
+
+    if not file_url:
+        return ""
+
+    parsed = urlparse(file_url)
+
+    markers = [
+        f"/object/public/{BUCKET}/",
+        f"/object/{BUCKET}/",
+        f"/object/sign/{BUCKET}/",
+    ]
+
+    for marker in markers:
+
+        if marker in parsed.path:
+
+            return unquote(
+                parsed.path.split(
+                    marker,
+                    1
+                )[1]
+            )
+
+    return ""
+
+
+def get_file_bytes(
+    file_path: str
+) -> bytes:
+
+    return (
+        supabase
+        .storage
+        .from_(BUCKET)
+        .download(file_path)
+    )
+
+
+def list_all_storage_files(
+    root_path: str = ROOT_PATH
+) -> list[str]:
+
+    storage = (
+        supabase
+        .storage
+        .from_(BUCKET)
+    )
+
+    files = []
+
+    def walk(folder_path: str):
+
+        offset = 0
+        limit = 1000
+
+        while True:
+
+            items = storage.list(
+                folder_path,
+                {
+                    "limit": limit,
+                    "offset": offset,
+                    "sortBy": {
+                        "column": "name",
+                        "order": "asc",
+                    },
+                },
+            ) or []
+
+            if not items:
+                break
+
+            for item in items:
+
+                name = item.get("name")
+
+                if not name:
+                    continue
+
+                full_path = (
+                    f"{folder_path}/{name}"
+                )
+
+                metadata = item.get("metadata")
+                item_id = item.get("id")
+
+                if (
+                    metadata is not None
+                    or item_id is not None
+                ):
+
+                    files.append(
+                        full_path
+                    )
+
+                else:
+
+                    walk(full_path)
+
+            if len(items) < limit:
+                break
+
+            offset += len(items)
+
+    walk(root_path)
+
+    return files
+
+
+def get_existing_paths() -> set[str]:
+
+    existing = set()
+
+    offset = 0
+    limit = 1000
+
+    while True:
+
+        response = (
+            supabase
+            .table("putusan")
+            .select("id,file_url")
+            .range(
+                offset,
+                offset + limit - 1
+            )
+            .execute()
+        )
+
+        rows = response.data or []
+
+        for row in rows:
+
+            path = storage_path_from_url(
+                row.get(
+                    "file_url",
+                    ""
+                )
+            )
+
+            if path:
+                existing.add(path)
+
+        if len(rows) < limit:
+            break
+
+        offset += limit
+
+    return existing
+
+
+# =========================================================
+# MENU
+# =========================================================
+
+menu = [
+    "Cari Putusan",
+    "Upload Putusan",
+    "Sinkronisasi Storage",
+]
+
+choice = st.sidebar.selectbox(
+    "Pilih Menu",
+    menu
+)
+
+
+# =========================================================
+# UPLOAD PUTUSAN
+# =========================================================
+
+if choice == "Upload Putusan":
+
+    st.subheader(
+        "Tambah Putusan Baru (Anonim)"
+    )
+
+    st.caption(
+        "Maksimal 500 KB per file • PDF, DOC, DOCX, RTF"
+    )
+
+    judul = st.text_input(
+        "Judul Putusan"
+    )
+
+    nomor = st.text_input(
+        "Nomor Putusan"
+    )
+
+    kasus_posisi = st.text_area(
+        "Ringkasan Kasus Posisi / Kata Kunci Bebas"
+    )
+
+    # -----------------------------------------------------
+    # Streamlit membutuhkan integer MB untuk
+    # max_upload_size.
+    #
+    # 1 = 1 MB sebagai batas teknis widget.
+    # Batas nyata aplikasi tetap 500 KB melalui
+    # pemeriksaan file_dokumen.size di bawah.
+    # -----------------------------------------------------
+
+    file_dokumen = st.file_uploader(
+        "Upload putusan (Anonimisasi dianjurkan)",
+        type=[
+            "pdf",
+            "doc",
+            "docx",
+            "rtf"
+        ],
+        max_upload_size=1,
+        key="upload_putusan",
+    )
+
+    # -----------------------------------------------------
+    # TOMBOL SIMPAN
+    # -----------------------------------------------------
+
+    if st.button(
+        "Simpan",
+        key="simpan_putusan"
+    ):
+
+        if (
+            not file_dokumen
+            or not judul
+            or not nomor
+        ):
+
+            st.error(
+                "Lengkapi semua data!"
+            )
+
+        # 500 KB = 512000 byte
+        elif file_dokumen.size > 512000:
+
+            st.error(
+                "🚨 Gagal: Ukuran file terlalu besar! "
+                "Batas maksimal adalah 500 KB per file."
+            )
+
+        else:
+
+            with st.spinner(
+                "Sedang memproses..."
+            ):
+
+                file_bytes = (
+                    file_dokumen.getvalue()
+                )
+
+                teks_putusan = ""
+
+                if file_dokumen.name.lower().endswith(
+                    ".pdf"
+                ):
+
+                    teks_putusan = (
+                        extract_pdf_text(
+                            file_bytes
+                        )
+                    )
+
+                if not teks_putusan:
+
+                    extension = (
+                        Path(
+                            file_dokumen.name
+                        ).suffix.upper()
+                    )
+
+                    teks_putusan = (
+                        f"Dokumen "
+                        f"{extension.lstrip('.') or 'FILE'} "
+                        "tersimpan di Storage."
+                    )
+
+                nama_file_aman = (
+                    file_dokumen
+                    .name
+                    .replace(" ", "_")
+                )
+
+                file_path = (
+                    f"{ROOT_PATH}/"
+                    f"{nama_file_aman}"
+                )
+
+                content_type = (
+                    file_dokumen.type
+                    or safe_mime(
+                        file_dokumen.name
+                    )
+                )
+
+                try:
+
+                    supabase.storage.from_(
+                        BUCKET
+                    ).upload(
+                        path=file_path,
+                        file=file_bytes,
+                        file_options={
+                            "content-type": content_type,
+                            "upsert": "true",
+                        },
+                    )
+
+                    file_url = (
+                        supabase
+                        .storage
+                        .from_(BUCKET)
+                        .get_public_url(
+                            file_path
+                        )
+                    )
+
+                    data = {
+                        "judul": judul,
+                        "nomor": nomor,
+                        "file_url": file_url,
+                        "isi_teks": teks_putusan,
+                        "tags": kasus_posisi,
+                    }
+
+                    (
+                        supabase
+                        .table("putusan")
+                        .insert(data)
+                        .execute()
+                    )
+
+                    st.success(
+                        "✅ Dokumen berhasil diupload "
+                        "dan dimasukkan ke mesin pencarian."
+                    )
+
+                except Exception as e:
+
+                    st.error(
+                        "❌ Gagal mengupload dokumen."
+                    )
+
+                    st.code(
+                        str(e)
+                    )
+
+
+# =========================================================
+# SINKRONISASI STORAGE
+# =========================================================
+
+elif choice == "Sinkronisasi Storage":
+
+    st.subheader(
+        "🔄 Sinkronisasi File Storage"
+    )
+
+    st.info(
+        "Fitur ini hanya mendaftarkan file yang sudah "
+        "ada di Supabase Storage ke tabel 'putusan'. "
+        "File asli tidak dihapus dan tidak di-upload ulang."
+    )
+
+    st.write(
+        f"Lokasi yang diperiksa: "
+        f"`{BUCKET}/{ROOT_PATH}/`"
+    )
+
+    if st.button(
+        "🔄 Sinkronkan File Storage",
+        key="sync_storage"
+    ):
+
+        with st.spinner(
+            "Membaca file Storage..."
+        ):
+
+            try:
+
+                storage_files = (
+                    list_all_storage_files()
+                )
+
+                existing_paths = (
+                    get_existing_paths()
+                )
+
+                added_count = 0
+                skipped_count = 0
+                failed_count = 0
+
+                for file_path in storage_files:
+
+                    if file_path in existing_paths:
+
+                        skipped_count += 1
+                        continue
+
+                    file_name = (
+                        Path(file_path).name
+                    )
+
+                    extension = (
+                        Path(file_name)
+                        .suffix
+                        .lower()
+                    )
+
+                    judul_otomatis = (
+                        clean_title(
+                            file_name
+                        )
+                    )
+
+                    nomor_otomatis = (
+                        extract_case_number(
+                            file_name
+                        )
+                    )
+
+                    tags_otomatis = (
+                        build_tags(
+                            file_name,
+                            extension
+                        )
+                    )
+
+                    isi_teks = ""
+
+                    if extension == ".pdf":
+
+                        try:
+
+                            file_bytes = (
+                                get_file_bytes(
+                                    file_path
+                                )
+                            )
+
+                            isi_teks = (
+                                extract_pdf_text(
+                                    file_bytes
+                                )
+                            )
+
+                        except Exception:
+
+                            isi_teks = ""
+
+                    if not isi_teks:
+
+                        tipe = (
+                            extension
+                            .lstrip(".")
+                            .upper()
+                            or "DOKUMEN"
+                        )
+
+                        isi_teks = (
+                            f"File {tipe} "
+                            "yang tersimpan "
+                            "di Supabase Storage."
+                        )
+
+                    try:
+
+                        file_url = (
+                            supabase
+                            .storage
+                            .from_(BUCKET)
+                            .get_public_url(
+                                file_path
+                            )
+                        )
+
+                        data = {
+                            "judul": judul_otomatis,
+                            "nomor": nomor_otomatis,
+                            "file_url": file_url,
+                            "isi_teks": isi_teks,
+                            "tags": tags_otomatis,
+                        }
+
+                        (
+                            supabase
+                            .table("putusan")
+                            .insert(data)
+                            .execute()
+                        )
+
+                        existing_paths.add(
+                            file_path
+                        )
+
+                        added_count += 1
+
+                    except Exception:
+
+                        failed_count += 1
+
+                # -------------------------------------------------
+                # HASIL
+                # -------------------------------------------------
+
+                st.success(
+                    "✅ Sinkronisasi selesai!"
+                )
+
+                col1, col2, col3 = (
+                    st.columns(3)
+                )
+
+                with col1:
+
+                    st.metric(
+                        "Total File Storage",
+                        len(storage_files)
+                    )
+
+                with col2:
+
+                    st.metric(
+                        "File Baru",
+                        added_count
+                    )
+
+                with col3:
+
+                    st.metric(
+                        "Sudah Terdaftar",
+                        skipped_count
+                    )
+
+                # Nama file sengaja TIDAK ditampilkan
+                if skipped_count:
+
+                    st.info(
+                        f"ℹ️ {skipped_count} file "
+                        "sudah terdaftar di database."
+                    )
+
+                if added_count:
+
+                    st.success(
+                        f"✅ {added_count} file baru "
+                        "berhasil ditambahkan ke database."
+                    )
+
+                if failed_count:
+
+                    st.warning(
+                        f"⚠️ {failed_count} file "
+                        "gagal didaftarkan."
+                    )
+
+                else:
+
+                    st.caption(
+                        "Tidak ada file yang gagal diproses."
+                    )
+
+            except Exception as e:
+
+                st.error(
+                    "❌ Sinkronisasi gagal."
+                )
+
+                st.code(
+                    str(e)
+                )
+
+
+# =========================================================
+# PENCARIAN PUTUSAN
+# =========================================================
+
+else:
+
+    st.subheader(
+        "Pencarian Putusan (Deep Search)"
+    )
+
+    query = st.text_input(
+        "Masukkan kata kunci...",
+        key="search_query"
+    )
+
+    if query:
+
+        query = query.strip()
+
+        if not query:
+
+            st.info(
+                "Masukkan kata kunci pencarian."
+            )
+
+        else:
+
+            try:
+
+                pattern = (
+                    f"%{query}%"
+                )
+
+                # -------------------------------------------------
+                # PENCARIAN JUDUL
+                # -------------------------------------------------
+
+                hasil_judul = (
+                    supabase
+                    .table("putusan")
+                    .select("*")
+                    .ilike(
+                        "judul",
+                        pattern
+                    )
+                    .execute()
+                )
+
+                # -------------------------------------------------
+                # PENCARIAN NOMOR
+                # -------------------------------------------------
+
+                hasil_nomor = (
+                    supabase
+                    .table("putusan")
+                    .select("*")
+                    .ilike(
+                        "nomor",
+                        pattern
+                    )
+                    .execute()
+                )
+
+                # -------------------------------------------------
+                # PENCARIAN ISI
+                # -------------------------------------------------
+
+                hasil_isi = (
+                    supabase
+                    .table("putusan")
+                    .select("*")
+                    .ilike(
+                        "isi_teks",
+                        pattern
+                    )
+                    .execute()
+                )
+
+                # -------------------------------------------------
+                # PENCARIAN TAGS
+                # -------------------------------------------------
+
+                hasil_tags = (
+                    supabase
+                    .table("putusan")
+                    .select("*")
+                    .ilike(
+                        "tags",
+                        pattern
+                    )
+                    .execute()
+                )
+
+                # -------------------------------------------------
+                # GABUNGKAN
+                # -------------------------------------------------
+
+                semua_data = []
+
+                semua_data.extend(
+                    hasil_judul.data or []
+                )
+
+                semua_data.extend(
+                    hasil_nomor.data or []
+                )
+
+                semua_data.extend(
+                    hasil_isi.data or []
+                )
+
+                semua_data.extend(
+                    hasil_tags.data or []
+                )
+
+                # -------------------------------------------------
+                # HILANGKAN DUPLIKAT
+                # -------------------------------------------------
+
+                hasil_unik = []
+
+                seen = set()
+
+                for item in semua_data:
+
+                    item_id = (
+                        item.get("id")
+                    )
+
+                    if item_id is None:
+
+                        item_id = (
+                            item.get(
+                                "file_url",
+                                ""
+                            ),
+                            item.get(
+                                "judul",
+                                ""
+                            ),
+                            item.get(
+                                "nomor",
+                                ""
+                            ),
+                        )
+
+                    if item_id not in seen:
+
+                        seen.add(
+                            item_id
+                        )
+
+                        hasil_unik.append(
+                            item
+                        )
+
+                # -------------------------------------------------
+                # HASIL PENCARIAN
+                # -------------------------------------------------
+
+                if hasil_unik:
+
+                    st.success(
+                        f"Ditemukan "
+                        f"{len(hasil_unik)} putusan."
+                    )
+
+                    for item in hasil_unik:
+
+                        judul_hasil = (
+                            item.get("judul")
+                            or "Tanpa Judul"
+                        )
+
+                        nomor_hasil = (
+                            item.get("nomor")
+                            or "-"
+                        )
+
+                        st.write(
+                            f"### {judul_hasil}"
+                        )
+
+                        st.write(
+                            f"**Nomor:** "
+                            f"{nomor_hasil}"
+                        )
+
+                        if item.get("tags"):
+
+                            st.info(
+                                f"📝 {item['tags']}"
+                            )
+
+                        file_url = (
+                            item.get(
+                                "file_url"
+                            )
+                        )
+
+                        if file_url:
+
+                            try:
+
+                                path_str = (
+                                    storage_path_from_url(
+                                        file_url
+                                    )
+                                )
+
+                                if not path_str:
+
+                                    raise ValueError(
+                                        "Path file tidak dapat "
+                                        "dibaca dari file_url."
+                                    )
+
+                                file_bytes = (
+                                    get_file_bytes(
+                                        path_str
+                                    )
+                                )
+
+                                nama_download = (
+                                    Path(
+                                        path_str
+                                    ).name
+                                )
+
+                                mime = (
+                                    safe_mime(
+                                        nama_download
+                                    )
+                                )
+
+                                st.download_button(
+                                    label="💾 Download Dokumen",
+                                    data=file_bytes,
+                                    file_name=nama_download,
+                                    mime=mime,
+                                    key=(
+                                        "download_"
+                                        f"{item.get('id', path_str)}"
+                                    ),
+                                )
+
+                            except Exception as e:
+
+                                st.error(
+                                    "❌ Gagal menyiapkan "
+                                    "file download."
+                                )
+
+                                st.code(
+                                    str(e)
+                                )
+
+                        else:
+
+                            st.warning(
+                                "⚠️ File dokumen "
+                                "tidak tersedia."
+                            )
+
+                        st.divider()
+
+                else:
+
+                    st.info(
+                        "🔎 Dokumen tidak ditemukan."
+                    )
+
+            except Exception as e:
+
+                st.error(
+                    "❌ Terjadi kesalahan "
+                    "saat pencarian."
+                )
+
+                st.code(
+                    str(e)
+                )
