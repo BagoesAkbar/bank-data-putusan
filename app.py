@@ -1,119 +1,96 @@
-                            text = ""
-
-                    if not text:
-
-                        text = (
-                            f"File "
-                            f"{extension.lstrip('.') or 'dokumen'} "
-                            "yang tersimpan pada "
-                            "Supabase Storage."
-                        )
-
-                    file_url = (
-                        supabase
-                        .storage
-                        .from_(
-                            SUPABASE_BUCKET
-                        )
-                        .get_public_url(
-                            file_path
-                        )
-                    )
-
-                    row = {
-                        "judul":
-                            clean_title(
-                                file_name
-                            ),
-                        "nomor":
-                            case_number_from_name(
-                                file_name
-                            ),
-                        "file_url":
-                            file_url,
-                        "isi_teks":
-                            text,
-                        "tags":
-                            tags_from_name(
-                                file_name
-                            ),
-                    }
-
-                    try:
-
-                        (
-                            supabase
-                            .table("putusan")
-                            .insert(row)
-                            .execute()
-                        )
-
-                        existing.add(
-                            file_path
-                        )
-
-                        added += 1
-
-                    except Exception:
-
-                        failed += 1
-
-                col1, col2, col3 = (
-                    st.columns(3)
-                )
-
-                with col1:
-
-                    st.metric(
-                        "Total file",
-                        len(files)
-                    )
-
-                with col2:
-
-                    st.metric(
-                        "File baru",
-                        added
-                    )
-
-                with col3:
-
-                    st.metric(
-                        "Sudah terdaftar",
-                        skipped
-                    )
-
-                if failed:
-
-                    st.warning(
-                        f"{failed} file tidak dapat "
-                        "didaftarkan."
-                    )
-
-                else:
-
-                    st.success(
-                        "Sinkronisasi selesai."
-                    )
-
-            except Exception as exc:
-
-                st.error(
-                    "Sinkronisasi gagal dijalankan."
-                )
-
-                st.code(str(exc))
+import streamlit as st
+from supabase import create_client, Client
+import PyPDF2
+import mimetypes
+import io
+import re
+from pathlib import Path as FilePath
+from urllib.parse import urlparse, unquote
 
 
 # =========================================================
-# BUILDER
+# KONFIGURASI
+# =========================================================
+
+st.set_page_config(
+    page_title="Bank Data Putusan Menarik",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+SUPABASE_URL = "https://fymgslpozaruhtbtbbre.supabase.co"
+SUPABASE_BUCKET = "dokumen-putusan"
+SUPABASE_ROOT = "public"
+
+try:
+    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+except Exception:
+    st.error("SUPABASE_KEY belum diatur di Streamlit Secrets.")
+    st.stop()
+
+supabase: Client = create_client(
+    SUPABASE_URL,
+    SUPABASE_KEY
+)
+
+
+# =========================================================
+# TAMPILAN
 # =========================================================
 
 st.markdown(
     """
-    <div class="builder">
-        © 2026 Bagoes KA
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+    <style>
+    /* -----------------------------------------------------
+       TEMA TERANG
+       ----------------------------------------------------- */
+
+    .stApp {
+        background: #ffffff;
+        color: #172033;
+    }
+
+    .main .block-container {
+        max-width: 1120px;
+        padding-top: 2rem;
+        padding-bottom: 3rem;
+    }
+
+    /* Header */
+    .site-header {
+        border-bottom: 1px solid #e5e7eb;
+        padding-bottom: 1rem;
+        margin-bottom: 1.6rem;
+    }
+
+    .site-title {
+        color: #172033;
+        font-size: 1.65rem;
+        font-weight: 700;
+        letter-spacing: -0.025em;
+        line-height: 1.25;
+    }
+
+    .site-subtitle {
+        color: #667085;
+        font-size: 0.88rem;
+        margin-top: 0.3rem;
+    }
+
+    /* Hero */
+    .hero {
+        background: #f7f9fc;
+        border: 1px solid #e2e7ee;
+        border-radius: 14px;
+        padding: 1.7rem 1.8rem;
+        margin-bottom: 1.25rem;
+    }
+
+    .hero-title {
+        color: #172033;
+        font-size: 1.45rem;
+        font-weight: 700;
+        margin-bottom: 0.35rem;
+    }
+
+    .hero-text {
