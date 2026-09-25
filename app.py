@@ -26,7 +26,7 @@ supabase: Client = create_client(URL, KEY)
 
 
 # =========================================================
-# 2. JUDUL APLIKASI
+# 2. JUDUL
 # =========================================================
 
 st.title("Bank Data Putusan Menarik")
@@ -90,142 +90,18 @@ def build_tags(file_name: str, extension: str) -> str:
 def extract_pdf_text(file_bytes: bytes) -> str:
     try:
         reader = PyPDF2.PdfReader(io.BytesIO(file_bytes))
-
         pages = []
 
         for page in reader.pages:
-            text_page = page.extract_text()
+            page_text = page.extract_text()
 
-            if text_page:
-                pages.append(text_page)
+            if page_text:
+                pages.append(page_text)
 
         return "\n".join(pages).strip()
 
     except Exception:
         return ""
-
-
-def storage_path_from_url(file_url: str) -> str:
-    if not file_url:
-        return ""
-
-    parsed = urlparse(file_url)
-
-    markers = [
-        f"/object/public/{BUCKET}/",
-        f"/object/sign/{BUCKET}/",
-        f"/object/{BUCKET}/",
-    ]
-
-    for marker in markers:
-        if marker in parsed.path:
-            return unquote(
-                parsed.path.split(marker, 1)[1]
-            )
-
-    return ""
-
-
-def get_file_bytes(file_path: str) -> bytes:
-    return (
-        supabase
-        .storage
-        .from_(BUCKET)
-        .download(file_path)
-    )
-
-
-def list_all_storage_files(root_path: str = ROOT_PATH):
-    storage = supabase.storage.from_(BUCKET)
-    files = []
-
-    def walk(folder_path: str):
-        offset = 0
-        limit = 1000
-
-        while True:
-            items = storage.list(
-                folder_path,
-                {
-                    "limit": limit,
-                    "offset": offset,
-                    "sortBy": {
-                        "column": "name",
-                        "order": "asc",
-                    },
-                },
-            ) or []
-
-            if not items:
-                break
-
-            for item in items:
-                name = item.get("name")
-
-                if not name:
-                    continue
-
-                full_path = f"{folder_path}/{name}"
-
-                metadata = item.get("metadata")
-                item_id = item.get("id")
-
-                # File Storage umumnya mempunyai metadata/id.
-                # Folder biasanya tidak mempunyai keduanya.
-                is_file = (
-                    metadata is not None
-                    or item_id is not None
-                )
-
-                if is_file:
-                    files.append(full_path)
-                else:
-                    walk(full_path)
-
-            if len(items) < limit:
-                break
-
-            offset += len(items)
-
-    walk(root_path)
-
-    return files
-
-
-def get_existing_paths_from_database():
-    existing_paths = set()
-
-    offset = 0
-    limit = 1000
-
-    while True:
-        response = (
-            supabase
-            .table("putusan")
-            .select("id,file_url")
-            .range(
-                offset,
-                offset + limit - 1
-            )
-            .execute()
-        )
-
-        rows = response.data or []
-
-        for row in rows:
-            path = storage_path_from_url(
-                row.get("file_url", "")
-            )
-
-            if path:
-                existing_paths.add(path)
-
-        if len(rows) < limit:
-            break
-
-        offset += limit
-
-    return existing_paths
 
 
 def safe_mime(file_name: str) -> str:
@@ -254,6 +130,151 @@ def safe_mime(file_name: str) -> str:
     return "application/octet-stream"
 
 
+def storage_path_from_url(file_url: str) -> str:
+    if not file_url:
+        return ""
+
+    parsed = urlparse(file_url)
+
+    markers = [
+        f"/object/public/{BUCKET}/",
+        f"/object/sign/{BUCKET}/",
+        f"/object/{BUCKET}/",
+    ]
+
+    for marker in markers:
+
+        if marker in parsed.path:
+
+            return unquote(
+                parsed.path.split(
+                    marker,
+                    1
+                )[1]
+            )
+
+    return ""
+
+
+def get_file_bytes(file_path: str) -> bytes:
+    return (
+        supabase
+        .storage
+        .from_(BUCKET)
+        .download(file_path)
+    )
+
+
+def list_all_storage_files(
+    root_path: str = ROOT_PATH
+) -> list[str]:
+
+    storage = (
+        supabase
+        .storage
+        .from_(BUCKET)
+    )
+
+    files = []
+
+    def walk(folder_path: str):
+
+        offset = 0
+        limit = 1000
+
+        while True:
+
+            items = storage.list(
+                folder_path,
+                {
+                    "limit": limit,
+                    "offset": offset,
+                    "sortBy": {
+                        "column": "name",
+                        "order": "asc",
+                    },
+                },
+            ) or []
+
+            if not items:
+                break
+
+            for item in items:
+
+                name = item.get("name")
+
+                if not name:
+                    continue
+
+                full_path = (
+                    f"{folder_path}/{name}"
+                )
+
+                metadata = item.get("metadata")
+                item_id = item.get("id")
+
+                is_file = (
+                    metadata is not None
+                    or item_id is not None
+                )
+
+                if is_file:
+
+                    files.append(full_path)
+
+                else:
+
+                    walk(full_path)
+
+            if len(items) < limit:
+                break
+
+            offset += len(items)
+
+    walk(root_path)
+
+    return files
+
+
+def get_existing_paths_from_database() -> set[str]:
+
+    existing_paths = set()
+
+    offset = 0
+    limit = 1000
+
+    while True:
+
+        response = (
+            supabase
+            .table("putusan")
+            .select("id,file_url")
+            .range(
+                offset,
+                offset + limit - 1
+            )
+            .execute()
+        )
+
+        rows = response.data or []
+
+        for row in rows:
+
+            path = storage_path_from_url(
+                row.get("file_url", "")
+            )
+
+            if path:
+                existing_paths.add(path)
+
+        if len(rows) < limit:
+            break
+
+        offset += limit
+
+    return existing_paths
+
+
 # =========================================================
 # 4. MENU
 # =========================================================
@@ -266,7 +287,7 @@ menu = [
 
 choice = st.sidebar.selectbox(
     "Pilih Menu",
-    menu,
+    menu
 )
 
 
@@ -276,50 +297,87 @@ choice = st.sidebar.selectbox(
 
 if choice == "Upload Putusan":
 
-    st.subheader("Tambah Putusan Baru (Anonim)")
+    st.subheader(
+        "Tambah Putusan Baru (Anonim)"
+    )
 
-    judul = st.text_input("Judul Putusan")
-    nomor = st.text_input("Nomor Putusan")
+    st.caption(
+        "Maksimal 500 KB per file • PDF, DOC, DOCX, RTF"
+    )
+
+    judul = st.text_input(
+        "Judul Putusan"
+    )
+
+    nomor = st.text_input(
+        "Nomor Putusan"
+    )
 
     kasus_posisi = st.text_area(
         "Ringkasan Kasus Posisi / Kata Kunci Bebas"
     )
 
-   file_dokumen = st.file_uploader(
-    "Upload putusan (Anonimisasi dianjurkan) — maksimal 500 KB per file",
-    type=["pdf", "doc", "docx", "rtf"],
-)
+    file_dokumen = st.file_uploader(
+        "Upload putusan (Anonimisasi dianjurkan)",
+        type=[
+            "pdf",
+            "doc",
+            "docx",
+            "rtf"
+        ],
+        key="upload_putusan",
+    )
 
-    if st.button("Simpan"):
+    if st.button(
+        "Simpan",
+        key="simpan_putusan"
+    ):
 
-        if not file_dokumen or not judul or not nomor:
-            st.error("Lengkapi semua data!")
+        if (
+            not file_dokumen
+            or not judul
+            or not nomor
+        ):
+
+            st.error(
+                "Lengkapi semua data!"
+            )
 
         elif file_dokumen.size > 512000:
+
             st.error(
-                "🚨 Gagal: Ukuran file terlalu besar. "
-                "Batas maksimal adalah 500 KB."
+                "🚨 Gagal: Ukuran file terlalu besar! "
+                "Batas maksimal adalah 500 KB per file."
             )
 
         else:
 
-            with st.spinner("Sedang memproses..."):
+            with st.spinner(
+                "Sedang memproses..."
+            ):
 
-                file_bytes = file_dokumen.getvalue()
+                file_bytes = (
+                    file_dokumen.getvalue()
+                )
 
                 teks_putusan = ""
 
-                if file_dokumen.name.lower().endswith(".pdf"):
-                    teks_putusan = extract_pdf_text(
-                        file_bytes
+                if file_dokumen.name.lower().endswith(
+                    ".pdf"
+                ):
+
+                    teks_putusan = (
+                        extract_pdf_text(
+                            file_bytes
+                        )
                     )
 
                 if not teks_putusan:
 
                     extension = (
-                        Path(file_dokumen.name)
-                        .suffix
-                        .upper()
+                        Path(
+                            file_dokumen.name
+                        ).suffix.upper()
                     )
 
                     teks_putusan = (
@@ -341,7 +399,9 @@ if choice == "Upload Putusan":
 
                 content_type = (
                     file_dokumen.type
-                    or safe_mime(file_dokumen.name)
+                    or safe_mime(
+                        file_dokumen.name
+                    )
                 )
 
                 try:
@@ -361,7 +421,9 @@ if choice == "Upload Putusan":
                         supabase
                         .storage
                         .from_(BUCKET)
-                        .get_public_url(file_path)
+                        .get_public_url(
+                            file_path
+                        )
                     )
 
                     data = {
@@ -390,7 +452,9 @@ if choice == "Upload Putusan":
                         "❌ Gagal mengupload dokumen."
                     )
 
-                    st.code(str(e))
+                    st.code(
+                        str(e)
+                    )
 
 
 # =========================================================
@@ -399,7 +463,9 @@ if choice == "Upload Putusan":
 
 elif choice == "Sinkronisasi Storage":
 
-    st.subheader("🔄 Sinkronisasi File Storage")
+    st.subheader(
+        "🔄 Sinkronisasi File Storage"
+    )
 
     st.info(
         "Fitur ini mendaftarkan file yang sudah ada "
@@ -413,7 +479,8 @@ elif choice == "Sinkronisasi Storage":
     )
 
     if st.button(
-        "🔄 Sinkronkan File Storage"
+        "🔄 Sinkronkan File Storage",
+        key="sync_storage"
     ):
 
         with st.spinner(
@@ -436,7 +503,6 @@ elif choice == "Sinkronisasi Storage":
 
                 for file_path in storage_files:
 
-                    # Sudah terdaftar → jangan dibuat lagi
                     if file_path in existing_paths:
 
                         skipped_count += 1
@@ -453,7 +519,9 @@ elif choice == "Sinkronisasi Storage":
                     )
 
                     judul_otomatis = (
-                        clean_title(file_name)
+                        clean_title(
+                            file_name
+                        )
                     )
 
                     nomor_otomatis = (
@@ -470,10 +538,6 @@ elif choice == "Sinkronisasi Storage":
                     )
 
                     isi_teks = ""
-
-                    # -------------------------------------
-                    # PDF → ekstraksi teks
-                    # -------------------------------------
 
                     if extension == ".pdf":
 
@@ -495,10 +559,6 @@ elif choice == "Sinkronisasi Storage":
 
                             isi_teks = ""
 
-                    # -------------------------------------
-                    # Fallback
-                    # -------------------------------------
-
                     if not isi_teks:
 
                         tipe = (
@@ -509,7 +569,8 @@ elif choice == "Sinkronisasi Storage":
                         )
 
                         isi_teks = (
-                            f"File {tipe} yang tersimpan "
+                            f"File {tipe} "
+                            "yang tersimpan "
                             "di Supabase Storage."
                         )
 
@@ -549,15 +610,13 @@ elif choice == "Sinkronisasi Storage":
 
                         failed_count += 1
 
-                # -----------------------------------------
-                # HASIL
-                # -----------------------------------------
-
                 st.success(
                     "✅ Sinkronisasi selesai!"
                 )
 
-                col1, col2, col3 = st.columns(3)
+                col1, col2, col3 = (
+                    st.columns(3)
+                )
 
                 with col1:
 
@@ -580,25 +639,11 @@ elif choice == "Sinkronisasi Storage":
                         skipped_count
                     )
 
-                if failed_count > 0:
-
-                    st.warning(
-                        f"⚠️ {failed_count} file gagal "
-                        "didaftarkan."
-                    )
-
-                else:
-
-                    st.caption(
-                        "Tidak ada file yang gagal diproses."
-                    )
-
-                # SENGAJA tidak menampilkan nama file
                 if skipped_count > 0:
 
                     st.info(
-                        f"ℹ️ {skipped_count} file sudah "
-                        "terdaftar di database."
+                        f"ℹ️ {skipped_count} file "
+                        "sudah terdaftar di database."
                     )
 
                 if added_count > 0:
@@ -608,13 +653,28 @@ elif choice == "Sinkronisasi Storage":
                         "berhasil ditambahkan ke database."
                     )
 
+                if failed_count > 0:
+
+                    st.warning(
+                        f"⚠️ {failed_count} file "
+                        "gagal didaftarkan."
+                    )
+
+                else:
+
+                    st.caption(
+                        "Tidak ada file yang gagal diproses."
+                    )
+
             except Exception as e:
 
                 st.error(
                     "❌ Sinkronisasi gagal."
                 )
 
-                st.code(str(e))
+                st.code(
+                    str(e)
+                )
 
 
 # =========================================================
@@ -628,23 +688,25 @@ else:
     )
 
     query = st.text_input(
-        "Masukkan kata kunci..."
+        "Masukkan kata kunci...",
+        key="search_query"
     )
 
     if query:
 
         query = query.strip()
 
-        if query:
+        if not query:
+
+            st.info(
+                "Masukkan kata kunci pencarian."
+            )
+
+        else:
 
             try:
 
                 pattern = f"%{query}%"
-
-                # -----------------------------------------
-                # Pencarian terpisah
-                # Tidak memakai .or_()
-                # -----------------------------------------
 
                 hasil_judul = (
                     supabase
@@ -690,10 +752,6 @@ else:
                     .execute()
                 )
 
-                # -----------------------------------------
-                # Gabungkan
-                # -----------------------------------------
-
                 semua_data = []
 
                 semua_data.extend(
@@ -711,10 +769,6 @@ else:
                 semua_data.extend(
                     hasil_tags.data or []
                 )
-
-                # -----------------------------------------
-                # Hilangkan duplikat
-                # -----------------------------------------
 
                 hasil_unik = []
                 seen = set()
@@ -742,12 +796,13 @@ else:
 
                     if item_id not in seen:
 
-                        seen.add(item_id)
-                        hasil_unik.append(item)
+                        seen.add(
+                            item_id
+                        )
 
-                # -----------------------------------------
-                # HASIL PENCARIAN
-                # -----------------------------------------
+                        hasil_unik.append(
+                            item
+                        )
 
                 if hasil_unik:
 
@@ -773,7 +828,8 @@ else:
                         )
 
                         st.write(
-                            f"**Nomor:** {nomor_hasil}"
+                            f"**Nomor:** "
+                            f"{nomor_hasil}"
                         )
 
                         if item.get("tags"):
@@ -783,7 +839,9 @@ else:
                             )
 
                         file_url = (
-                            item.get("file_url")
+                            item.get(
+                                "file_url"
+                            )
                         )
 
                         if file_url:
@@ -866,9 +924,3 @@ else:
                 st.code(
                     str(e)
                 )
-
-        else:
-
-            st.info(
-                "Masukkan kata kunci pencarian."
-            )
