@@ -286,9 +286,10 @@ if choice == "Upload Putusan":
     )
 
     file_dokumen = st.file_uploader(
-        "Upload putusan (Anonimisasi dianjurkan)",
-        type=["pdf", "doc", "docx", "rtf"],
-    )
+    "Upload putusan (Anonimisasi dianjurkan) — maksimal 500 KB per file",
+    type=["pdf", "doc", "docx", "rtf"],
+    max_upload_size=0.5,
+)
 
     if st.button("Simpan"):
 
