@@ -2,38 +2,27 @@ import streamlit as st
 from supabase import create_client, Client
 import PyPDF2
 import mimetypes
+import io
 import re
 from pathlib import Path
 from urllib.parse import urlparse, unquote
-import io
 
 
 # =========================================================
-# 1. KONFIGURASI SUPABASE
+# 1. KONFIGURASI
 # =========================================================
 
 URL = "https://fymgslpozaruhtbtbbre.supabase.co"
+BUCKET = "dokumen-putusan"
+ROOT_PATH = "public"
 
-# Lebih aman menggunakan Streamlit Secrets.
-# Pada Streamlit Cloud:
-# Settings > Secrets
-#
-# Isi:
-# SUPABASE_KEY = "KEY_ANDA"
-#
 try:
     KEY = st.secrets["SUPABASE_KEY"]
 except Exception:
-    KEY = "PASTE_PUBLISHABLE_KEY_ANDA"
-
-if KEY == "PASTE_PUBLISHABLE_KEY_ANDA":
     st.error("SUPABASE_KEY belum diatur di Streamlit Secrets.")
     st.stop()
 
 supabase: Client = create_client(URL, KEY)
-
-BUCKET = "dokumen-putusan"
-ROOT_PATH = "public"
 
 
 # =========================================================
@@ -48,38 +37,22 @@ st.title("Bank Data Putusan Menarik")
 # =========================================================
 
 def clean_title(file_name: str) -> str:
-    """
-    Mengubah nama file menjadi judul yang lebih mudah dibaca.
-    Contoh:
-    449_Pdt.G_2026_PA.Twg_file.pdf
-    ->
-    449 Pdt.G 2026 PA.Twg file
-    """
     stem = Path(file_name).stem
-
-    stem = re.sub(r"[_]+", " ", stem)
+    stem = stem.replace("_", " ")
     stem = re.sub(r"\s+", " ", stem)
-
     return stem.strip()
 
 
 def extract_case_number(file_name: str) -> str:
-    """
-    Mencoba membaca nomor perkara dari nama file.
-    Tidak mengarang nomor bila pola tidak jelas.
-    """
-
     patterns = [
-        r"(?i)(\d+)[_\- ]+(Pdt\.G)[_\- ]+(\d{4})[_\- ]+([A-Z]{2,}(?:\.[A-Za-z0-9]+)+)",
-        r"(?i)(\d+)[_\- ]+(Pdt\.G)[_\- ]+(\d{4})[_\- ]+([A-Z]{2,})",
+        r"(?i)(\d+)[_\- ]+(Pdt\.G)[_\- ]+(\d{4})[_\- ]+([A-Za-z]{2,}(?:\.[A-Za-z0-9]+)+)",
+        r"(?i)(\d+)[_\- ]+(Pdt\.G)[_\- ]+(\d{4})[_\- ]+([A-Za-z]{2,})",
     ]
 
     for pattern in patterns:
-
         match = re.search(pattern, file_name)
 
         if match:
-
             return (
                 f"{match.group(1)}/"
                 f"{match.group(2)}/"
@@ -90,43 +63,24 @@ def extract_case_number(file_name: str) -> str:
     return ""
 
 
-def build_tags(file_name: str, ext: str) -> str:
-    """
-    Membuat kata kunci dasar dari nama file.
-    """
-
+def build_tags(file_name: str, extension: str) -> str:
     stem = Path(file_name).stem
 
-    words = re.split(
-        r"[^A-Za-z0-9]+",
-        stem
-    )
+    words = re.split(r"[^A-Za-z0-9]+", stem)
+    words = [word.lower() for word in words if word]
 
-    words = [
-        word.lower()
-        for word in words
-        if word
-    ]
+    tags = ["storage sync"]
 
-    tags = [
-        "storage sync"
-    ]
-
-    if ext:
-        tags.append(
-            ext.lstrip(".").lower()
-        )
+    if extension:
+        tags.append(extension.lstrip(".").lower())
 
     tags.extend(words)
 
-    # Hilangkan duplikat
     result = []
     seen = set()
 
     for tag in tags:
-
         if tag not in seen:
-
             seen.add(tag)
             result.append(tag)
 
@@ -134,61 +88,70 @@ def build_tags(file_name: str, ext: str) -> str:
 
 
 def extract_pdf_text(file_bytes: bytes) -> str:
-    """
-    Membaca teks dari PDF.
-    Kalau PDF gagal dibaca, tidak menggagalkan proses sync.
-    """
-
     try:
-
-        reader = PyPDF2.PdfReader(
-            io.BytesIO(file_bytes)
-        )
+        reader = PyPDF2.PdfReader(io.BytesIO(file_bytes))
 
         pages = []
 
         for page in reader.pages:
-
             text_page = page.extract_text()
 
             if text_page:
-
                 pages.append(text_page)
 
         return "\n".join(pages).strip()
 
     except Exception:
-
         return ""
 
 
-def list_all_storage_files(
-    storage,
-    root_path: str = ROOT_PATH
-) -> list[str]:
+def storage_path_from_url(file_url: str) -> str:
+    if not file_url:
+        return ""
 
-    """
-    Membaca semua file di dalam public/
-    termasuk subfolder jika ada.
-    """
+    parsed = urlparse(file_url)
 
+    markers = [
+        f"/object/public/{BUCKET}/",
+        f"/object/sign/{BUCKET}/",
+        f"/object/{BUCKET}/",
+    ]
+
+    for marker in markers:
+        if marker in parsed.path:
+            return unquote(
+                parsed.path.split(marker, 1)[1]
+            )
+
+    return ""
+
+
+def get_file_bytes(file_path: str) -> bytes:
+    return (
+        supabase
+        .storage
+        .from_(BUCKET)
+        .download(file_path)
+    )
+
+
+def list_all_storage_files(root_path: str = ROOT_PATH):
+    storage = supabase.storage.from_(BUCKET)
     files = []
 
-    def walk(path: str):
-
+    def walk(folder_path: str):
         offset = 0
-        page_size = 1000
+        limit = 1000
 
         while True:
-
             items = storage.list(
-                path,
+                folder_path,
                 {
-                    "limit": page_size,
+                    "limit": limit,
                     "offset": offset,
                     "sortBy": {
                         "column": "name",
-                        "order": "asc"
+                        "order": "asc",
                     },
                 },
             ) or []
@@ -197,31 +160,29 @@ def list_all_storage_files(
                 break
 
             for item in items:
-
                 name = item.get("name")
 
                 if not name:
                     continue
 
-                full_path = f"{path}/{name}"
+                full_path = f"{folder_path}/{name}"
 
                 metadata = item.get("metadata")
+                item_id = item.get("id")
 
-                # File biasanya mempunyai metadata/id.
+                # File Storage umumnya mempunyai metadata/id.
+                # Folder biasanya tidak mempunyai keduanya.
                 is_file = (
                     metadata is not None
-                    or item.get("id") is not None
+                    or item_id is not None
                 )
 
                 if is_file:
-
                     files.append(full_path)
-
                 else:
-
                     walk(full_path)
 
-            if len(items) < page_size:
+            if len(items) < limit:
                 break
 
             offset += len(items)
@@ -231,69 +192,20 @@ def list_all_storage_files(
     return files
 
 
-def storage_path_from_url(
-    file_url: str
-) -> str:
-
-    """
-    Mengambil path file dari URL Supabase.
-    """
-
-    if not file_url:
-        return ""
-
-    parsed = urlparse(file_url)
-
-    marker = (
-        f"/object/public/{BUCKET}/"
-    )
-
-    if marker in parsed.path:
-
-        return unquote(
-            parsed.path.split(
-                marker,
-                1
-            )[1]
-        )
-
-    # Fallback URL lama
-    marker2 = f"{BUCKET}/"
-
-    if marker2 in parsed.path:
-
-        return unquote(
-            parsed.path.split(
-                marker2,
-                1
-            )[1]
-        )
-
-    return ""
-
-
-def fetch_existing_file_paths() -> set[str]:
-
-    """
-    Membaca file_url yang sudah ada
-    di tabel putusan agar tidak membuat
-    duplikasi ketika Sync ditekan lagi.
-    """
-
+def get_existing_paths_from_database():
     existing_paths = set()
 
     offset = 0
-    page_size = 1000
+    limit = 1000
 
     while True:
-
         response = (
             supabase
             .table("putusan")
             .select("id,file_url")
             .range(
                 offset,
-                offset + page_size - 1
+                offset + limit - 1
             )
             .execute()
         )
@@ -301,53 +213,45 @@ def fetch_existing_file_paths() -> set[str]:
         rows = response.data or []
 
         for row in rows:
-
             path = storage_path_from_url(
                 row.get("file_url", "")
             )
 
             if path:
-
                 existing_paths.add(path)
 
-        if len(rows) < page_size:
-
+        if len(rows) < limit:
             break
 
-        offset += page_size
+        offset += limit
 
     return existing_paths
 
 
-def get_file_bytes(
-    file_path: str
-) -> bytes:
+def safe_mime(file_name: str) -> str:
+    mime = mimetypes.guess_type(file_name)[0]
 
-    """
-    Mengambil bytes file dari Storage.
-    """
+    if mime:
+        return mime
 
-    return (
-        supabase
-        .storage
-        .from_(BUCKET)
-        .download(file_path)
-    )
+    extension = Path(file_name).suffix.lower()
 
+    if extension == ".rtf":
+        return "application/rtf"
 
-def escape_like(value: str) -> str:
+    if extension == ".doc":
+        return "application/msword"
 
-    """
-    Mencegah % dan _ menjadi wildcard
-    ketika user melakukan pencarian.
-    """
+    if extension == ".docx":
+        return (
+            "application/vnd.openxmlformats-officedocument."
+            "wordprocessingml.document"
+        )
 
-    return (
-        value
-        .replace("\\", "\\\\")
-        .replace("%", "\\%")
-        .replace("_", "\\_")
-    )
+    if extension == ".pdf":
+        return "application/pdf"
+
+    return "application/octet-stream"
 
 
 # =========================================================
@@ -362,7 +266,7 @@ menu = [
 
 choice = st.sidebar.selectbox(
     "Pilih Menu",
-    menu
+    menu,
 )
 
 
@@ -372,17 +276,10 @@ choice = st.sidebar.selectbox(
 
 if choice == "Upload Putusan":
 
-    st.subheader(
-        "Tambah Putusan Baru (Anonim)"
-    )
+    st.subheader("Tambah Putusan Baru (Anonim)")
 
-    judul = st.text_input(
-        "Judul Putusan"
-    )
-
-    nomor = st.text_input(
-        "Nomor Putusan"
-    )
+    judul = st.text_input("Judul Putusan")
+    nomor = st.text_input("Nomor Putusan")
 
     kasus_posisi = st.text_area(
         "Ringkasan Kasus Posisi / Kata Kunci Bebas"
@@ -390,60 +287,44 @@ if choice == "Upload Putusan":
 
     file_dokumen = st.file_uploader(
         "Upload putusan (Anonimisasi dianjurkan)",
-        type=[
-            "pdf",
-            "doc",
-            "docx",
-            "rtf"
-        ]
+        type=["pdf", "doc", "docx", "rtf"],
     )
 
     if st.button("Simpan"):
 
-        if not (
-            file_dokumen
-            and judul
-            and nomor
-        ):
-
-            st.error(
-                "Lengkapi semua data!"
-            )
+        if not file_dokumen or not judul or not nomor:
+            st.error("Lengkapi semua data!")
 
         elif file_dokumen.size > 512000:
-
             st.error(
-                "🚨 Gagal: Ukuran file Anda terlalu besar! "
+                "🚨 Gagal: Ukuran file terlalu besar. "
                 "Batas maksimal adalah 500 KB."
             )
 
         else:
 
-            with st.spinner(
-                "Sedang memproses..."
-            ):
+            with st.spinner("Sedang memproses..."):
+
+                file_bytes = file_dokumen.getvalue()
 
                 teks_putusan = ""
 
-                if file_dokumen.name.lower().endswith(
-                    ".pdf"
-                ):
-
+                if file_dokumen.name.lower().endswith(".pdf"):
                     teks_putusan = extract_pdf_text(
-                        file_dokumen.getvalue()
+                        file_bytes
                     )
 
                 if not teks_putusan:
 
-                    ext = (
+                    extension = (
                         Path(file_dokumen.name)
                         .suffix
                         .upper()
-                        .lstrip(".")
                     )
 
                     teks_putusan = (
-                        f"Dokumen {ext or 'FILE'} "
+                        f"Dokumen "
+                        f"{extension.lstrip('.') or 'FILE'} "
                         "tersimpan di Storage."
                     )
 
@@ -460,10 +341,7 @@ if choice == "Upload Putusan":
 
                 content_type = (
                     file_dokumen.type
-                    or mimetypes.guess_type(
-                        file_dokumen.name
-                    )[0]
-                    or "application/octet-stream"
+                    or safe_mime(file_dokumen.name)
                 )
 
                 try:
@@ -472,7 +350,7 @@ if choice == "Upload Putusan":
                         BUCKET
                     ).upload(
                         path=file_path,
-                        file=file_dokumen.getvalue(),
+                        file=file_bytes,
                         file_options={
                             "content-type": content_type,
                             "upsert": "true",
@@ -483,9 +361,7 @@ if choice == "Upload Putusan":
                         supabase
                         .storage
                         .from_(BUCKET)
-                        .get_public_url(
-                            file_path
-                        )
+                        .get_public_url(file_path)
                     )
 
                     data = {
@@ -496,14 +372,16 @@ if choice == "Upload Putusan":
                         "tags": kasus_posisi,
                     }
 
-                    supabase.table(
-                        "putusan"
-                    ).insert(
-                        data
-                    ).execute()
+                    (
+                        supabase
+                        .table("putusan")
+                        .insert(data)
+                        .execute()
+                    )
 
                     st.success(
-                        "✅ Dokumen berhasil diupload!"
+                        "✅ Dokumen berhasil diupload "
+                        "dan dimasukkan ke mesin pencarian."
                     )
 
                 except Exception as e:
@@ -521,15 +399,12 @@ if choice == "Upload Putusan":
 
 elif choice == "Sinkronisasi Storage":
 
-    st.subheader(
-        "🔄 Sinkronisasi File Storage"
-    )
+    st.subheader("🔄 Sinkronisasi File Storage")
 
     st.info(
-        "Fitur ini hanya mendaftarkan file yang "
-        "sudah ada di Supabase Storage ke tabel "
-        "'putusan'. File asli tidak dihapus dan "
-        "tidak di-upload ulang."
+        "Fitur ini mendaftarkan file yang sudah ada "
+        "di Supabase Storage ke tabel 'putusan'. "
+        "File asli tidak dihapus dan tidak di-upload ulang."
     )
 
     st.write(
@@ -547,87 +422,60 @@ elif choice == "Sinkronisasi Storage":
 
             try:
 
-                storage = (
-                    supabase
-                    .storage
-                    .from_(BUCKET)
-                )
-
-                # -----------------------------------------
-                # Ambil semua file Storage
-                # -----------------------------------------
-
                 storage_files = (
-                    list_all_storage_files(
-                        storage,
-                        ROOT_PATH
-                    )
+                    list_all_storage_files()
                 )
-
-                # -----------------------------------------
-                # Ambil file yang sudah ada di database
-                # -----------------------------------------
 
                 existing_paths = (
-                    fetch_existing_file_paths()
+                    get_existing_paths_from_database()
                 )
 
-                added = []
-                skipped = []
-                failed = []
-
-                # -----------------------------------------
-                # Proses masing-masing file
-                # -----------------------------------------
+                added_count = 0
+                skipped_count = 0
+                failed_count = 0
 
                 for file_path in storage_files:
 
-                    # -------------------------------------
-                    # Kalau sudah ada → jangan duplikat
-                    # -------------------------------------
-
+                    # Sudah terdaftar → jangan dibuat lagi
                     if file_path in existing_paths:
 
-                        skipped.append(
-                            file_path
-                        )
-
+                        skipped_count += 1
                         continue
 
                     file_name = (
                         Path(file_path).name
                     )
 
-                    ext = (
+                    extension = (
                         Path(file_name)
                         .suffix
                         .lower()
                     )
 
-                    # -------------------------------------
-                    # Buat metadata otomatis
-                    # -------------------------------------
-
-                    title = clean_title(
-                        file_name
+                    judul_otomatis = (
+                        clean_title(file_name)
                     )
 
-                    nomor = extract_case_number(
-                        file_name
+                    nomor_otomatis = (
+                        extract_case_number(
+                            file_name
+                        )
                     )
 
-                    tags = build_tags(
-                        file_name,
-                        ext
+                    tags_otomatis = (
+                        build_tags(
+                            file_name,
+                            extension
+                        )
                     )
 
                     isi_teks = ""
 
                     # -------------------------------------
-                    # PDF → ambil isi teks
+                    # PDF → ekstraksi teks
                     # -------------------------------------
 
-                    if ext == ".pdf":
+                    if extension == ".pdf":
 
                         try:
 
@@ -648,47 +496,40 @@ elif choice == "Sinkronisasi Storage":
                             isi_teks = ""
 
                     # -------------------------------------
-                    # Jika tidak bisa ekstrak
+                    # Fallback
                     # -------------------------------------
 
                     if not isi_teks:
 
                         tipe = (
-                            ext
+                            extension
                             .lstrip(".")
                             .upper()
                             or "DOKUMEN"
                         )
 
                         isi_teks = (
-                            f"File {tipe} "
-                            "yang tersimpan "
+                            f"File {tipe} yang tersimpan "
                             "di Supabase Storage."
                         )
 
                     try:
 
-                        # ---------------------------------
-                        # URL publik file yang SUDAH ADA
-                        # ---------------------------------
-
                         file_url = (
-                            storage
+                            supabase
+                            .storage
+                            .from_(BUCKET)
                             .get_public_url(
                                 file_path
                             )
                         )
 
-                        # ---------------------------------
-                        # Masukkan metadata ke tabel
-                        # ---------------------------------
-
                         data = {
-                            "judul": title,
-                            "nomor": nomor,
+                            "judul": judul_otomatis,
+                            "nomor": nomor_otomatis,
                             "file_url": file_url,
                             "isi_teks": isi_teks,
-                            "tags": tags,
+                            "tags": tags_otomatis,
                         }
 
                         (
@@ -698,37 +539,22 @@ elif choice == "Sinkronisasi Storage":
                             .execute()
                         )
 
-                        added.append(
-                            file_path
-                        )
-
-                        # Supaya file tersebut
-                        # tidak diproses lagi dalam
-                        # satu sesi sync.
                         existing_paths.add(
                             file_path
                         )
 
-                    except Exception as e:
+                        added_count += 1
 
-                        failed.append(
-                            (
-                                file_path,
-                                str(e)
-                            )
-                        )
+                    except Exception:
+
+                        failed_count += 1
 
                 # -----------------------------------------
-                # HASIL SINKRONISASI
+                # HASIL
                 # -----------------------------------------
 
                 st.success(
                     "✅ Sinkronisasi selesai!"
-                )
-
-                st.metric(
-                    "Total file Storage",
-                    len(storage_files)
                 )
 
                 col1, col2, col3 = st.columns(3)
@@ -736,69 +562,51 @@ elif choice == "Sinkronisasi Storage":
                 with col1:
 
                     st.metric(
-                        "File Baru",
-                        len(added)
+                        "Total File Storage",
+                        len(storage_files)
                     )
 
                 with col2:
 
                     st.metric(
-                        "Sudah Terdaftar",
-                        len(skipped)
+                        "File Baru",
+                        added_count
                     )
 
                 with col3:
 
                     st.metric(
-                        "Gagal",
-                        len(failed)
+                        "Sudah Terdaftar",
+                        skipped_count
                     )
 
-                # -----------------------------------------
-                # File baru
-                # -----------------------------------------
+                if failed_count > 0:
 
-                if added:
-
-                    st.write(
-                        "### ✅ File yang ditambahkan"
+                    st.warning(
+                        f"⚠️ {failed_count} file gagal "
+                        "didaftarkan."
                     )
 
-                    for path in added:
+                else:
 
-                        st.write(
-                            f"✅ `{path}`"
-                        )
-
-                # -----------------------------------------
-# File yang sudah terdaftar
-# -----------------------------------------
-
-if skipped:
-
-    st.info(
-        f"ℹ️ {len(skipped)} file sudah terdaftar "
-        "di database."
-    )
-
-                # -----------------------------------------
-                # File gagal
-                # -----------------------------------------
-
-                if failed:
-
-                    st.error(
-                        "Beberapa file gagal "
-                        "didaftarkan:"
+                    st.caption(
+                        "Tidak ada file yang gagal diproses."
                     )
 
-                    for path, error in failed:
+                # SENGAJA tidak menampilkan nama file
+                if skipped_count > 0:
 
-                        st.write(
-                            f"❌ `{path}`"
-                        )
+                    st.info(
+                        f"ℹ️ {skipped_count} file sudah "
+                        "terdaftar di database."
+                    )
 
-                        st.code(error)
+                if added_count > 0:
+
+                    st.success(
+                        f"✅ {added_count} file baru "
+                        "berhasil ditambahkan ke database."
+                    )
 
             except Exception as e:
 
@@ -810,7 +618,7 @@ if skipped:
 
 
 # =========================================================
-# 7. PENCARIAN PUTUSAN
+# 7. CARI PUTUSAN
 # =========================================================
 
 else:
@@ -827,23 +635,15 @@ else:
 
         query = query.strip()
 
-        if not query:
-
-            st.info(
-                "Masukkan kata kunci pencarian."
-            )
-
-        else:
+        if query:
 
             try:
 
-                pattern = (
-                    f"%{escape_like(query)}%"
-                )
+                pattern = f"%{query}%"
 
                 # -----------------------------------------
                 # Pencarian terpisah
-                # Tidak lagi menggunakan .or_()
+                # Tidak memakai .or_()
                 # -----------------------------------------
 
                 hasil_judul = (
@@ -896,16 +696,21 @@ else:
 
                 semua_data = []
 
-                for response in [
-                    hasil_judul,
-                    hasil_nomor,
-                    hasil_isi,
-                    hasil_tags,
-                ]:
+                semua_data.extend(
+                    hasil_judul.data or []
+                )
 
-                    semua_data.extend(
-                        response.data or []
-                    )
+                semua_data.extend(
+                    hasil_nomor.data or []
+                )
+
+                semua_data.extend(
+                    hasil_isi.data or []
+                )
+
+                semua_data.extend(
+                    hasil_tags.data or []
+                )
 
                 # -----------------------------------------
                 # Hilangkan duplikat
@@ -938,13 +743,10 @@ else:
                     if item_id not in seen:
 
                         seen.add(item_id)
-
-                        hasil_unik.append(
-                            item
-                        )
+                        hasil_unik.append(item)
 
                 # -----------------------------------------
-                # Tampilkan
+                # HASIL PENCARIAN
                 # -----------------------------------------
 
                 if hasil_unik:
@@ -956,14 +758,22 @@ else:
 
                     for item in hasil_unik:
 
-                        st.write(
-                            "### "
-                            f"{item.get('judul') or 'Tanpa Judul'}"
+                        judul_hasil = (
+                            item.get("judul")
+                            or "Tanpa Judul"
+                        )
+
+                        nomor_hasil = (
+                            item.get("nomor")
+                            or "-"
                         )
 
                         st.write(
-                            "**Nomor:** "
-                            f"{item.get('nomor') or '-'}"
+                            f"### {judul_hasil}"
+                        )
+
+                        st.write(
+                            f"**Nomor:** {nomor_hasil}"
                         )
 
                         if item.get("tags"):
@@ -973,9 +783,7 @@ else:
                             )
 
                         file_url = (
-                            item.get(
-                                "file_url"
-                            )
+                            item.get("file_url")
                         )
 
                         if file_url:
@@ -988,6 +796,13 @@ else:
                                     )
                                 )
 
+                                if not path_str:
+
+                                    raise ValueError(
+                                        "Path file tidak dapat "
+                                        "dibaca dari file_url."
+                                    )
+
                                 file_bytes = (
                                     get_file_bytes(
                                         path_str
@@ -995,14 +810,13 @@ else:
                                 )
 
                                 nama_download = (
-                                    Path(path_str).name
+                                    Path(
+                                        path_str
+                                    ).name
                                 )
 
-                                mime = (
-                                    mimetypes.guess_type(
-                                        nama_download
-                                    )[0]
-                                    or "application/octet-stream"
+                                mime = safe_mime(
+                                    nama_download
                                 )
 
                                 st.download_button(
@@ -1011,7 +825,7 @@ else:
                                     file_name=nama_download,
                                     mime=mime,
                                     key=(
-                                        f"download_"
+                                        "download_"
                                         f"{item.get('id', path_str)}"
                                     ),
                                 )
@@ -1046,9 +860,15 @@ else:
 
                 st.error(
                     "❌ Terjadi kesalahan "
-                    "saat melakukan pencarian."
+                    "saat pencarian."
                 )
 
                 st.code(
                     str(e)
                 )
+
+        else:
+
+            st.info(
+                "Masukkan kata kunci pencarian."
+            )
