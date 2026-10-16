@@ -113,7 +113,7 @@ with st.sidebar:
     menu = ["Beranda (Pencarian)", "Upload Putusan Baru"]
     choice = st.radio("Pilih Menu:", menu)
     st.divider()
-    st.caption("RADAR © 2024")
+    st.caption("RADAR by BAGOESKA © 2026")
 
 # =========================================================
 # BERANDA (PENCARIAN)
