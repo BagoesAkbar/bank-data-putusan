@@ -43,10 +43,10 @@ css = chr(10).join([
     "#kategori-hukum { scroll-margin-top: 1rem; }",
     ".st-key-upload_putusan [data-testid*=\"FileUploaderDropzoneInstructions\"] { font-size: 0 !important; }",
     ".st-key-upload_putusan [data-testid*=\"FileUploaderDropzoneInstructions\"] * { font-size: 0 !important; line-height: 0 !important; visibility: hidden !important; }",
-    ".st-key-upload_putusan [data-testid*=\"FileUploaderDropzoneInstructions\"]::after { content: \"Maksimal 500 KB per file\"; display: block !important; font-size: 0.75rem !important; line-height: 1.2 !important; color: rgba(49, 51, 63, 0.60) !important; margin-top: 2px !important; visibility: visible !important; }",
+    ".st-key-upload_putusan [data-testid*=\"FileUploaderDropzoneInstructions\"]::after { content: \"Maksimal 500 KB per file\"; display: block !important; font-size: 0.75rem !important; line-height: 1.2 !important; color: #c8c8c8 !important; margin-top: 2px !important; visibility: visible !important; }",
     ".st-key-upload_putusan [data-testid=\"stFileUploaderDropzoneInstructions\"] { font-size: 0 !important; }",
     ".st-key-upload_putusan [data-testid=\"stFileUploaderDropzoneInstructions\"] * { font-size: 0 !important; line-height: 0 !important; visibility: hidden !important; }",
-    ".st-key-upload_putusan [data-testid=\"stFileUploaderDropzoneInstructions\"]::after { content: \"Maksimal 500 KB per file\"; display: block !important; font-size: 0.75rem !important; line-height: 1.2 !important; color: rgba(49, 51, 63, 0.60) !important; margin-top: 2px !important; visibility: visible !important; }",
+    ".st-key-upload_putusan [data-testid=\"stFileUploaderDropzoneInstructions\"]::after { content: \"Maksimal 500 KB per file\"; display: block !important; font-size: 0.75rem !important; line-height: 1.2 !important; color: #c8c8c8 !important; margin-top: 2px !important; visibility: visible !important; }",
     "</style>",
 ])
 st.markdown(css, unsafe_allow_html=True)
