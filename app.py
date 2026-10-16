@@ -11,7 +11,7 @@ st.set_page_config(
     page_title="RADAR | Repositori Akses Data Andal dan Responsif",
     page_icon="⚖️",
     layout="wide",
-    initial_sidebar_state="collapsed" # Menyembunyikan sidebar di awal agar lebih mirip landing page
+    initial_sidebar_state="collapsed"
 )
 
 # =========================================================
@@ -34,12 +34,10 @@ supabase: Client = create_client(URL, SUPABASE_KEY)
 # =========================================================
 css = chr(10).join([
     "<style>",
-    /* CSS Uploader 500KB (Dipertahankan) */
-    ".st-key-upload_putusan [data-testid*=\"FileUploaderDropzoneInstructions\"] { font-size: 0 !important; }",
-    ".st-key-upload_putusan [data-testid*=\"FileUploaderDropzoneInstructions\"] * { font-size: 0 !important; line-height: 0 !important; visibility: hidden !important; }",
-    ".st-key-upload_putusan [data-testid*=\"FileUploaderDropzoneInstructions\"]::after { content: \"Maksimal 500 KB per file\"; display: block !important; font-size: 0.75rem !important; line-height: 1.2 !important; color: #c8c8c8 !important; margin-top: 2px !important; visibility: visible !important; }",
+    ".st-key-upload_putusan [data-testid*='FileUploaderDropzoneInstructions'] { font-size: 0 !important; }",
+    ".st-key-upload_putusan [data-testid*='FileUploaderDropzoneInstructions'] * { font-size: 0 !important; line-height: 0 !important; visibility: hidden !important; }",
+    ".st-key-upload_putusan [data-testid*='FileUploaderDropzoneInstructions']::after { content: 'Maksimal 500 KB per file'; display: block !important; font-size: 0.75rem !important; line-height: 1.2 !important; color: #c8c8c8 !important; margin-top: 2px !important; visibility: visible !important; }",
     
-    /* CSS Tampilan Dashboard Baru */
     ".radar-header-container { display: flex; align-items: center; gap: 1.2rem; margin-bottom: 2.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid #333; }",
     ".radar-logo-box { background-color: #1e1e1e; padding: 0.8rem; border-radius: 12px; border: 1px solid #333; display: flex; align-items: center; justify-content: center; }",
     ".radar-title { margin: 0; font-size: 1.6rem; font-weight: 800; color: #ffffff; letter-spacing: 0.5px; }",
@@ -55,15 +53,14 @@ css = chr(10).join([
     ".radar-card-value { font-size: 1.8rem; font-weight: 700; color: #ffffff; margin-bottom: 0.2rem; }",
     ".radar-card-label { font-size: 0.85rem; color: #9ca3af; }",
     
-    /* Menyesuaikan kotak pencarian Streamlit agar lebih elegan */
-    "[data-testid=\"stTextInput\"] input { background-color: #ffffff !important; color: #000000 !important; border-radius: 8px !important; padding: 0.8rem 1rem !important; font-size: 1.05rem !important; }",
-    "[data-testid=\"stTextInput\"] input::placeholder { color: #6b7280 !important; }",
+    "[data-testid='stTextInput'] input { background-color: #ffffff !important; color: #000000 !important; border-radius: 8px !important; padding: 0.8rem 1rem !important; font-size: 1.05rem !important; }",
+    "[data-testid='stTextInput'] input::placeholder { color: #6b7280 !important; }",
     "</style>",
 ])
 st.markdown(css, unsafe_allow_html=True)
 
 # =========================================================
-# FUNGSI BANTU (RADAR & STORAGE SYNC)
+# FUNGSI BANTU
 # =========================================================
 def clean_title(file_name: str) -> str:
     stem = Path(file_name).stem
@@ -103,7 +100,6 @@ def safe_mime(filename: str) -> str:
 
 def get_total_documents() -> int:
     try:
-        # Menghitung total ID dokumen secara ringan
         res = supabase.table("putusan").select("id").execute()
         return len(res.data) if res.data else 0
     except:
@@ -120,11 +116,10 @@ with st.sidebar:
     st.caption("RADAR © 2024")
 
 # =========================================================
-# TAMPILAN BERANDA (Sesuai Screenshot SI-BAGOES)
+# BERANDA (PENCARIAN)
 # =========================================================
 if choice == "Beranda (Pencarian)":
     
-    # 1. Header (Logo & Title)
     header_html = """
     <div class="radar-header-container">
         <div class="radar-logo-box">
@@ -140,28 +135,24 @@ if choice == "Beranda (Pencarian)":
     """
     st.markdown(header_html, unsafe_allow_html=True)
     
-    # 2. Hero Section
     hero_html = """
     <div class="radar-hero-title">Temukan Putusan. Dalami Pertimbangan Hukumnya.</div>
     <div class="radar-hero-desc">Ruang kerja digital untuk menghimpun, menelusuri, dan mengelompokkan putusan pengadilan sebagai bahan kajian dan pengembangan pengetahuan hukum.</div>
     """
     st.markdown(hero_html, unsafe_allow_html=True)
     
-    # 3. Bar Pencarian Besar
     query = st.text_input(
         "Cari", 
         label_visibility="collapsed", 
         placeholder="🔍 Cari nomor perkara, isu hukum, atau kata dalam putusan..."
     )
     
-    # 4. Tombol Aksi Tambahan
     col_btn1, col_btn2, _ = st.columns([1.5, 1.5, 7])
     with col_btn1:
         st.button("Cari Putusan", use_container_width=True, type="primary")
     with col_btn2:
         st.button("Jelajahi Kategori", use_container_width=True)
 
-    # --- PROSES PENCARIAN ---
     if query:
         st.markdown("<br>", unsafe_allow_html=True)
         try:
@@ -169,7 +160,6 @@ if choice == "Beranda (Pencarian)":
                 results = supabase.table("putusan").select("*").or_(f"judul.ilike.%{query}%,nomor.ilike.%{query}%,isi_teks.ilike.%{query}%,tags.ilike.%{query}%").execute()
                 
                 if results.data:
-                    # Logika Deduplikasi Milik Bapak Hakim
                     seen = set()
                     hasil_unik = []
                     for item in results.data:
@@ -217,56 +207,52 @@ if choice == "Beranda (Pencarian)":
         except Exception as e:
             st.error("Terjadi kesalahan saat pencarian.")
 
-    # --- RINGKASAN KOLEKSI (Hanya tampil jika belum mencari) ---
     if not query:
-        st.markdown("<div class="radar-stats-title">Ringkasan koleksi — statistik arsip</div>", unsafe_allow_html=True)
-        
-        # Mengambil jumlah dokumen aktual dari database
+        st.markdown("<div class='radar-stats-title'>Ringkasan koleksi — statistik arsip</div>", unsafe_allow_html=True)
         total_docs = get_total_documents()
         
         col1, col2, col3 = st.columns(3)
-        
         with col1:
             st.markdown(f"""
-            <div class="radar-card">
-                <div class="radar-card-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+            <div class='radar-card'>
+                <div class='radar-card-icon'>
+                    <svg width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'></path><polyline points='14 2 14 8 20 8'></polyline><line x1='16' y1='13' x2='8' y2='13'></line><line x1='16' y1='17' x2='8' y2='17'></line><polyline points='10 9 9 9 8 9'></polyline></svg>
                 </div>
                 <div>
-                    <div class="radar-card-value">{total_docs}</div>
-                    <div class="radar-card-label">Total putusan tersimpan</div>
+                    <div class='radar-card-value'>{total_docs}</div>
+                    <div class='radar-card-label'>Total putusan tersimpan</div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
             
         with col2:
             st.markdown("""
-            <div class="radar-card">
-                <div class="radar-card-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+            <div class='radar-card'>
+                <div class='radar-card-icon'>
+                    <svg width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z'></path><line x1='7' y1='7' x2='7.01' y2='7'></line></svg>
                 </div>
                 <div>
-                    <div class="radar-card-value">12+</div>
-                    <div class="radar-card-label">Kategori hukum terdeteksi</div>
+                    <div class='radar-card-value'>12+</div>
+                    <div class='radar-card-label'>Kategori hukum terdeteksi</div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
             
         with col3:
             st.markdown("""
-            <div class="radar-card">
-                <div class="radar-card-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            <div class='radar-card'>
+                <div class='radar-card-icon'>
+                    <svg width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'></circle><polyline points='12 6 12 12 16 14'></polyline></svg>
                 </div>
                 <div>
-                    <div class="radar-card-value">Hari Ini</div>
-                    <div class="radar-card-label">Pembaruan putusan terbaru</div>
+                    <div class='radar-card-value'>Hari Ini</div>
+                    <div class='radar-card-label'>Pembaruan putusan terbaru</div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
 # =========================================================
-# TAMPILAN UPLOAD
+# UPLOAD PUTUSAN BARU
 # =========================================================
 elif choice == "Upload Putusan Baru":
     st.markdown("### Tambah Putusan Baru ke RADAR")
