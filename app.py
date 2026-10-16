@@ -257,7 +257,7 @@ elif choice == "Upload Putusan Baru":
     
     judul_input = st.text_input("Judul Putusan", placeholder="Akan otomatis terisi jika file dipilih...")
     nomor_input = st.text_input("Nomor Putusan", placeholder="Akan otomatis terisi jika dikenali...")
-    kasus_posisi = st.text_area("Ringkasan Tambahan (Kategori / Isu Hukum)", placeholder="Contoh: Wanprestasi, Sengketa Waris, dll.")
+    kasus_posisi = st.text_area("Ringkasan Tambahan (Kategori / Isu Hukum / Tag agar mudah dicari)", placeholder="Contoh: Wanprestasi, Sengketa Waris, Diska WNA dll.")
     
     if st.button("Simpan & Sinkronisasi", type="primary"):
         if file_dokumen and not judul_input:
