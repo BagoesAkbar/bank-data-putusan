@@ -113,7 +113,7 @@ with st.sidebar:
     menu = ["Beranda (Pencarian)", "Upload Putusan Baru"]
     choice = st.radio("Pilih Menu:", menu)
     st.divider()
-    st.caption("RADAR by BAGOESKA © 2026")
+    st.caption("RADAR build by BagoesKA © 2026")
 
 # =========================================================
 # BERANDA (PENCARIAN)
@@ -146,12 +146,6 @@ if choice == "Beranda (Pencarian)":
         label_visibility="collapsed", 
         placeholder="🔍 Cari nomor perkara, isu hukum, atau kata dalam putusan..."
     )
-    
-    col_btn1, col_btn2, _ = st.columns([1.5, 1.5, 7])
-    with col_btn1:
-        st.button("Cari Putusan", use_container_width=True, type="primary")
-    with col_btn2:
-        st.button("Jelajahi Kategori", use_container_width=True)
 
     if query:
         st.markdown("<br>", unsafe_allow_html=True)
